@@ -423,7 +423,7 @@ function App() {
     buildings.forEach(b => {
       const m = markersRef.current[b.uid];
       if (!m) return;
-      const done = !!surveys[b.uid];
+      const done = !!(surveys[b.uid] && surveys[b.uid].savedAt);
       const isV = b.type === "verify";
       const isSel = devMode && b.uid === selected;
       let show = true;
@@ -592,7 +592,7 @@ function App() {
       const {latitude, longitude} = pos.coords;
       let minD = Infinity, near = null;
       buildings.forEach(b => {
-        if (surveys[b.uid]) return;
+        if (surveys[b.uid] && surveys[b.uid].savedAt) return;
         const d = Math.sqrt((b.lat-latitude)**2 + (b.lng-longitude)**2);
         if (d < minD) { minD = d; near = b.uid; }
       });
@@ -673,9 +673,9 @@ function App() {
 
   const verifyCount = buildings.filter(b => b.type==="verify").length;
   const surveyCount = buildings.filter(b => b.type==="survey").length;
-  const doneCount = buildings.filter(b => surveys[b.uid]).length;
+  const doneCount = buildings.filter(b => surveys[b.uid] && surveys[b.uid].savedAt).length;
   const pct = buildings.length ? Math.round((doneCount / buildings.length) * 100) : 0;
-  const todoCount = buildings.filter(b => b.type==="survey" && !surveys[b.uid]).length;
+  const todoCount = buildings.filter(b => b.type==="survey" && !(surveys[b.uid] && surveys[b.uid].savedAt)).length;
   const selB = selected ? buildings.find(x => x.uid === selected) : null;
   const allUids = buildings.map(b => b.uid);
   const devEditCount = devEdits.removed.length + Object.keys(devEdits.moved).length + devEdits.added.length;
@@ -802,7 +802,7 @@ function App() {
                       background:selB.type==="verify"?"#1e3a5f":"#3b1219",
                       color:selB.type==="verify"?"#60a5fa":"#fca5a5"
                     }}>{selB.type==="verify"?"VERIFY":"NEW SURVEY"}</span>
-                    {surveys[selected] && <span style={{marginLeft:6,fontSize:10,padding:"2px 8px",borderRadius:4,background:"#166534",color:"#4ade80"}}>SAVED</span>}
+                    {surveys[selected] && surveys[selected].savedAt && <span style={{marginLeft:6,fontSize:10,padding:"2px 8px",borderRadius:4,background:"#166534",color:"#4ade80"}}>SAVED</span>}
                   </div>
                   <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}</div>
                 </div>
@@ -902,7 +902,7 @@ function App() {
                   flex:1,padding:"11px",borderRadius:9,border:"none",cursor:saving?"wait":"pointer",
                   background:"linear-gradient(135deg,#16a34a,#15803d)",color:"#fff",fontWeight:700,fontSize:13,
                 }}>{saving?"Saving...":"💾 Save"}</button>
-                {surveys[selected] && <button onClick={handleClear} style={{padding:"11px 14px",borderRadius:9,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:13}}>🗑</button>}
+                {surveys[selected] && surveys[selected].savedAt && <button onClick={handleClear} style={{padding:"11px 14px",borderRadius:9,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:13}}>🗑</button>}
               </div>
 
               <div style={{display:"flex",gap:8,marginTop:8,paddingBottom:20}}>
