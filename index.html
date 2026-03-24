@@ -348,17 +348,54 @@ function App() {
       saveLocalDev(best);
     };
     initDev();
-    // Load surveys from Google Sheets
-    fetchSurveys().then(result => {
+    // Load surveys from Google Sheets — sheet is the source of truth
+    fetchSurveys().then(async (result) => {
       if (result.error) {
         console.error("Initial survey load failed:", result.error);
-        // Show error toast after a short delay so showToast is available
         setTimeout(() => {
           if (typeof window.__showToast === "function") window.__showToast("⚠ Failed to load from Google Sheet: " + result.error, "error");
         }, 500);
+        setSurveys(result.data || {});
+        setLoading(false);
+        return;
       }
-      setSurveys(result.data || {});
-      setLoading(false);
+
+      const sheetData = result.data || {};
+      const hasRows = Object.keys(sheetData).length > 0;
+
+      if (hasRows) {
+        // Sheet has data — use it as source of truth
+        setSurveys(sheetData);
+        setLoading(false);
+      } else {
+        // Sheet is empty — do initial sync of all buildings to sheet
+        try {
+          const curBuildings = applyDevEdits(ALL_BUILDINGS, devEditsRef.current);
+          const rows = curBuildings.map(b => {
+            const pf = b.prefill || {};
+            return {
+              uid: b.uid, survey_type: b.type, ID: String(b.nsiId || ""),
+              occupancy_type: pf.occType || "", building_type: pf.buildingType || "",
+              number_of_stories: pf.numStories || "", area: pf.area || "",
+              foundation_type: pf.foundationType || "", foundation_height: pf.firstFloorHeight || "",
+              year_built: pf.yearBuilt || "", ground_elevation: pf.groundElev || "",
+              address: pf.address || "", longitude: String(b.lng), latitude: String(b.lat),
+              structure_value: pf.structureValue || "", content_value: pf.contentValue || "",
+              basement: pf.basement || "", notes: "", surveyor: "", savedAt: "",
+            };
+          });
+          await postJson({ action: "bulkSave", rows });
+          // Re-fetch to get the data we just pushed
+          const fresh = await fetchSurveys();
+          setSurveys(fresh.data || {});
+          setTimeout(() => {
+            if (typeof window.__showToast === "function") window.__showToast("Initial sync complete — " + rows.length + " buildings pushed to Sheet", "info");
+          }, 500);
+        } catch (err) {
+          console.error("Initial sync failed:", err);
+        }
+        setLoading(false);
+      }
     });
     // Poll only surveys every 30s
     const interval = setInterval(refreshSurveys, 30000);
@@ -564,17 +601,29 @@ function App() {
     }
   };
 
-  const handleClear = async () => {
+  const handleUndoSave = async () => {
     if (selected == null) return;
     savingRef.current = true;
     try {
-      await deleteSurveyEntry(selected);
-      setSurveys(prev => { const u = {...prev}; delete u[selected]; return u; });
       const b = buildings.find(x => x.uid === selected);
-      setForm(b?.prefill ? {...EMPTY_FORM, ...b.prefill} : EMPTY_FORM);
-      showToast("Cleared", "info");
+      const pf = b?.prefill || {};
+      // Reset to prefill data with empty savedAt/surveyor/notes
+      const resetEntry = {
+        occType: pf.occType || "", buildingType: pf.buildingType || "",
+        numStories: pf.numStories || "", area: pf.area || "",
+        foundationType: pf.foundationType || "", firstFloorHeight: pf.firstFloorHeight || "",
+        yearBuilt: pf.yearBuilt || "", groundElev: pf.groundElev || "",
+        address: pf.address || "",
+        structureValue: pf.structureValue || "", contentValue: pf.contentValue || "",
+        basement: pf.basement || "", notes: "", surveyor: "", savedAt: "",
+      };
+      // Update the sheet row (keep building in sheet but clear the survey)
+      await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, resetEntry);
+      setSurveys(prev => ({...prev, [selected]: resetEntry}));
+      setForm({...EMPTY_FORM, ...resetEntry});
+      showToast("Survey undone — point reset", "info");
     } catch (err) {
-      showToast("Clear failed: " + err.message, "error");
+      showToast("Undo failed: " + err.message, "error");
     } finally {
       savingRef.current = false;
     }
@@ -902,7 +951,7 @@ function App() {
                   flex:1,padding:"11px",borderRadius:9,border:"none",cursor:saving?"wait":"pointer",
                   background:"linear-gradient(135deg,#16a34a,#15803d)",color:"#fff",fontWeight:700,fontSize:13,
                 }}>{saving?"Saving...":"💾 Save"}</button>
-                {surveys[selected] && surveys[selected].savedAt && <button onClick={handleClear} style={{padding:"11px 14px",borderRadius:9,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:13}}>🗑</button>}
+                {surveys[selected] && surveys[selected].savedAt && <button onClick={handleUndoSave} style={{padding:"11px 14px",borderRadius:9,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:13}}>↩ Undo Save</button>}
               </div>
 
               <div style={{display:"flex",gap:8,marginTop:8,paddingBottom:20}}>
@@ -930,7 +979,10 @@ function App() {
         )}
         {loading && (
           <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(15,23,42,.8)",zIndex:1000}}>
-            <div style={{color:"#94a3b8"}}>Loading...</div>
+            <div style={{color:"#94a3b8",textAlign:"center"}}>
+              <div style={{fontSize:24,marginBottom:8,animation:"pulse 1.5s infinite"}}>☁️</div>
+              <div style={{fontSize:14,fontWeight:600}}>Loading from Google Sheet...</div>
+            </div>
           </div>
         )}
       </div>
