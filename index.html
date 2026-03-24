@@ -629,6 +629,48 @@ function App() {
     showToast("CSV exported — " + buildings.length + " buildings");
   };
 
+  const [sheetSyncing, setSheetSyncing] = useState(false);
+  const syncAllToSheet = async () => {
+    if (buildings.length === 0) { showToast("No buildings to sync", "error"); return; }
+    setSheetSyncing(true);
+    try {
+      const rows = buildings.map(b => {
+        const saved = surveys[b.uid];
+        const pf = b.prefill || {};
+        const s = saved || pf;
+        return {
+          uid: b.uid,
+          survey_type: b.type,
+          ID: String(b.nsiId || ""),
+          occupancy_type: s.occType || "",
+          building_type: s.buildingType || "",
+          number_of_stories: s.numStories || "",
+          area: s.area || "",
+          foundation_type: s.foundationType || "",
+          foundation_height: s.firstFloorHeight || "",
+          year_built: s.yearBuilt || "",
+          ground_elevation: s.groundElev || "",
+          address: s.address || "",
+          longitude: String(b.lng),
+          latitude: String(b.lat),
+          structure_value: s.structureValue || "",
+          content_value: s.contentValue || "",
+          basement: s.basement || "",
+          notes: s.notes || "",
+          surveyor: s.surveyor || "",
+          savedAt: s.savedAt || "",
+        };
+      });
+      const resp = await postJson({ action: "bulkSave", rows });
+      if (resp.error) throw new Error(resp.error);
+      showToast("Sheet synced — " + buildings.length + " buildings pushed!");
+    } catch (err) {
+      showToast("Sync failed: " + err.message, "error");
+    } finally {
+      setSheetSyncing(false);
+    }
+  };
+
   const verifyCount = buildings.filter(b => b.type==="verify").length;
   const surveyCount = buildings.filter(b => b.type==="survey").length;
   const doneCount = buildings.filter(b => surveys[b.uid]).length;
@@ -685,9 +727,10 @@ function App() {
           </div>
 
           <div style={{display:"flex",gap:5,marginTop:8}}>
-            <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest Unsurveyed</button>
-            <button onClick={exportCSV} style={abtn("#7c3aed")}>📥 Export CSV</button>
+            <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest</button>
+            <button onClick={exportCSV} style={abtn("#7c3aed")}>📥 CSV</button>
             <button onClick={()=>window.open(SHEET_URL,"_blank")} style={abtn("#0369a1")}>📊 Raw Data</button>
+            <button onClick={syncAllToSheet} disabled={sheetSyncing} style={abtn("#b45309")}>{sheetSyncing ? "⏳..." : "☁️ Sync Sheet"}</button>
           </div>
 
           {/* Developer Mode Panel */}
