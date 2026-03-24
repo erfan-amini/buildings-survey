@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>NSI Field Survey Tool — Shinnecock Peninsula</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏗</text></svg>">
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #root { height: 100%; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+
+const { useState, useEffect, useRef, useCallback } = React;
+
+const NSI_RAW = [{"id":46007,"lng":-72.4234887,"lat":40.87868823,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2638.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":12.452,"address":"109 Old Point Rd","structVal":339779.55,"contVal":169889.78},{"id":46009,"lng":-72.437397,"lat":40.8764025,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1590.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":12.9193,"address":"Cuffee Dr","structVal":269533.29,"contVal":134766.65},{"id":46010,"lng":-72.427336,"lat":40.8828015,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":828.1,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":24.5217,"address":"412 Old Soldiers Rd","structVal":130910.16,"contVal":65455.08},{"id":46011,"lng":-72.429986,"lat":40.88138178,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":753.8,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":25.0269,"address":"","structVal":106616.06,"contVal":53308.03},{"id":46012,"lng":-72.43117513,"lat":40.87203889,"occType":"RES1-1SWB","bldgType":"W","stories":1,"area":2220.3,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":11.3916,"address":"229 Round Swamp Rd","structVal":364146.96,"contVal":182073.48},{"id":46013,"lng":-72.43148339,"lat":40.87290723,"occType":"GOV1","bldgType":"C","stories":1,"area":5293.3,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":11.3167,"address":"31 Church St","structVal":836764.86,"contVal":418382.43},{"id":46015,"lng":-72.43610617,"lat":40.88394613,"occType":"RES1-3SNB","bldgType":"W","stories":3,"area":5577.1,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":20.6135,"address":"Sunset Trl","structVal":721683.21,"contVal":360841.6},{"id":46016,"lng":-72.44010623,"lat":40.87318922,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1821.6,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.2458,"address":"Little Beach Rd","structVal":263765.65,"contVal":131882.83},{"id":46017,"lng":-72.43675597,"lat":40.88143766,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":3474.6,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.1535,"address":"","structVal":521412.37,"contVal":260706.19},{"id":46018,"lng":-72.42589,"lat":40.8718165,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1346.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":5.5621,"address":"144 Old Point Rd","structVal":194995.21,"contVal":97497.6},{"id":46019,"lng":-72.43991017,"lat":40.87257999,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1576.5,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.5362,"address":"333 Little Beach Rd","structVal":267118.77,"contVal":133559.39},{"id":46021,"lng":-72.42967326,"lat":40.87805657,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":3218.0,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":18.7085,"address":"Gwatney Flds","structVal":465657.47,"contVal":232828.74},{"id":46022,"lng":-72.43237471,"lat":40.88114211,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2844.7,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":21.8832,"address":"426 Old Soldiers Rd","structVal":366392.21,"contVal":183196.1},{"id":46023,"lng":-72.42395561,"lat":40.87318073,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":1080.8,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":11.5352,"address":"128 Arabash Rd","structVal":156396.66,"contVal":78198.33},{"id":46024,"lng":-72.425335,"lat":40.8796605,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":2467.1,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":19.9912,"address":"105 Old Point Rd","structVal":357002.13,"contVal":178501.07},{"id":46025,"lng":-72.4276355,"lat":40.869417,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2056.0,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":10.568,"address":"152 Old Point Rd","structVal":245079.97,"contVal":122539.98},{"id":46026,"lng":-72.4295575,"lat":40.874582,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":2724.4,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":13.946,"address":"","structVal":378359.12,"contVal":189179.56},{"id":46027,"lng":-72.4343355,"lat":40.8774235,"occType":"RES1-1SWB","bldgType":"M","stories":1,"area":1433.4,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":15.8474,"address":"529 W Gate Rd","structVal":274295.42,"contVal":137147.71},{"id":46028,"lng":-72.43478934,"lat":40.87831666,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":1277.1,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":17.17,"address":"524 W Gate Rd","structVal":201883.97,"contVal":100941.98},{"id":46029,"lng":-72.435633,"lat":40.8769115,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1637.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":15.0571,"address":"Fishcow Lndg","structVal":195208.36,"contVal":97604.18},{"id":46031,"lng":-72.42403077,"lat":40.87347812,"occType":"RES3A","bldgType":"W","stories":2,"area":4103.5,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":12.4936,"address":"127 Arabash Rd","structVal":593792.86,"contVal":296896.43},{"id":46032,"lng":-72.42309729,"lat":40.88049597,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":3025.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":14.2125,"address":"","structVal":389625.15,"contVal":194812.58},{"id":46033,"lng":-72.43524774,"lat":40.87295953,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":1253.0,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":11.2481,"address":"243 W Church St","structVal":198077.4,"contVal":99038.7},{"id":46034,"lng":-72.425685,"lat":40.8702365,"occType":"RES1-1SNB","bldgType":"M","stories":1,"area":383.5,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.5649,"address":"167 Old Point Rd","structVal":76537.02,"contVal":38268.51},{"id":46035,"lng":-72.42693504,"lat":40.8695493,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1731.5,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.2706,"address":"151 Old Point Rd","structVal":259836.12,"contVal":129918.06},{"id":46036,"lng":-72.427148,"lat":40.8673145,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2556.1,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":8.9044,"address":"137 Old Point Rd","structVal":369880.79,"contVal":184940.39},{"id":46037,"lng":-72.42662027,"lat":40.88271475,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":3270.6,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":24.6117,"address":"409 Old Soldiers Rd","structVal":438467.04,"contVal":219233.52},{"id":46039,"lng":-72.42781292,"lat":40.86881898,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2222.4,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":9.8529,"address":"154 Old Point Rd","structVal":286250.27,"contVal":143125.14},{"id":46040,"lng":-72.43014209,"lat":40.87198372,"occType":"COM4","bldgType":"C","stories":2,"area":8781.9,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":13.6398,"address":"1 Church St","structVal":1219627.49,"contVal":609813.75},{"id":46041,"lng":-72.43315637,"lat":40.87556138,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1904.1,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":11.0838,"address":"533 Little Church Rd","structVal":255277.43,"contVal":127638.71},{"id":46042,"lng":-72.43335121,"lat":40.87289482,"occType":"RES1-1SWB","bldgType":"W","stories":1,"area":1672.9,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":9.8479,"address":"239 W Church St","structVal":274370.62,"contVal":137185.31},{"id":46043,"lng":-72.4361135,"lat":40.8728575,"occType":"RES2","bldgType":"H","stories":2,"area":1375.6,"foundType":"C","foundHt":2.0,"yrBuilt":1984,"groundElev":11.0708,"address":"245 Cemetary Rd","structVal":283917.65,"contVal":141958.82},{"id":46044,"lng":-72.43615404,"lat":40.87300266,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":2397.5,"foundType":"W","foundHt":1.0,"yrBuilt":1984,"groundElev":12.0882,"address":"245 Cemetary Rd","structVal":354402.13,"contVal":177201.06},{"id":46045,"lng":-72.436823,"lat":40.8834995,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2328.8,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":18.2093,"address":"Sunset Trl","structVal":277588.19,"contVal":138794.1},{"id":46047,"lng":-72.4272945,"lat":40.8684495,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1146.8,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.7825,"address":"156 Old Point Rd","structVal":199801.83,"contVal":99900.91},{"id":46048,"lng":-72.428299,"lat":40.8696865,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1058.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":11.5294,"address":"Dump Rd","structVal":153231.7,"contVal":76615.85},{"id":46049,"lng":-72.43061802,"lat":40.87208568,"occType":"COM6","bldgType":"C","stories":2,"area":5219.3,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":11.9948,"address":"101 Church St","structVal":672250.99,"contVal":336125.5},{"id":46050,"lng":-72.43985849,"lat":40.87217566,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2521.6,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.1892,"address":"","structVal":378404.38,"contVal":189202.19},{"id":46051,"lng":-72.42307478,"lat":40.87127756,"occType":"RES1-1SNB","bldgType":"M","stories":1,"area":1183.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.0355,"address":"Oyster Pond Rd","structVal":236176.7,"contVal":118088.35},{"id":46052,"lng":-72.42830694,"lat":40.88097214,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":1211.5,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":22.0211,"address":"305 Little Beach Rd","structVal":191517.08,"contVal":95758.54},{"id":46053,"lng":-72.43000307,"lat":40.87339255,"occType":"RES1-3SNB","bldgType":"W","stories":3,"area":8034.8,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":14.1267,"address":"223 Church St","structVal":1007557.65,"contVal":503778.83},{"id":46054,"lng":-72.43008831,"lat":40.87745953,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":1425.4,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":17.5721,"address":"314 Little Beach Rd","structVal":225325.65,"contVal":112662.83},{"id":46055,"lng":-72.4375274,"lat":40.8771447,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":3050.9,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":11.4267,"address":"530 W Gate Rd","structVal":392961.07,"contVal":196480.54},{"id":46056,"lng":-72.43915915,"lat":40.87450675,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1540.8,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":10.9334,"address":"329 Little Beach Rd","structVal":231218.01,"contVal":115609.01},{"id":46058,"lng":-72.4278835,"lat":40.874002,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":5309.1,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":17.2544,"address":"220 Church St","structVal":768248.01,"contVal":384124.0},{"id":46059,"lng":-72.43142732,"lat":40.88072247,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":5738.0,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":23.7078,"address":"424 Old Soldiers Rd","structVal":796896.22,"contVal":398448.11},{"id":46060,"lng":-72.43174469,"lat":40.86938247,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2360.3,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.4233,"address":"237 Round Swamp Rd","structVal":281342.99,"contVal":140671.5},{"id":46061,"lng":-72.43250612,"lat":40.87662644,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":1116.7,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":15.7083,"address":"432 Little Beach Rd","structVal":176520.03,"contVal":88260.02},{"id":46062,"lng":-72.43547093,"lat":40.87845478,"occType":"RES1-2SNB","bldgType":"M","stories":2,"area":3067.5,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":17.5012,"address":"526 W Gate Rd","structVal":468714.0,"contVal":234357.0},{"id":46063,"lng":-72.43668438,"lat":40.88187997,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":2163.4,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":13.8117,"address":"","structVal":376921.43,"contVal":188460.71},{"id":46064,"lng":-72.42289222,"lat":40.87355736,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":3424.6,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":11.7989,"address":"126 Arabash Rd","structVal":495884.98,"contVal":247942.49},{"id":46065,"lng":-72.425521,"lat":40.8699485,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2069.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.8901,"address":"167 Old Point Rd","structVal":310584.46,"contVal":155292.23},{"id":46066,"lng":-72.42618181,"lat":40.86909674,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2999.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.4929,"address":"3 E Creek Way","structVal":357585.7,"contVal":178792.85},{"id":46067,"lng":-72.42668,"lat":40.8753985,"occType":"RES1-3SWB","bldgType":"W","stories":3,"area":4353.9,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":16.0433,"address":"137 Church St","structVal":575759.74,"contVal":287879.87},{"id":46068,"lng":-72.4278828,"lat":40.86902346,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1209.5,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":10.4514,"address":"154 Old Point Rd","structVal":204942.76,"contVal":102471.38},{"id":46069,"lng":-72.42913418,"lat":40.86356101,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":957.1,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":5.8108,"address":"E Point Rd","structVal":142251.89,"contVal":71125.95},{"id":46070,"lng":-72.43222151,"lat":40.87289805,"occType":"REL1","bldgType":"C","stories":2,"area":5190.5,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":10.9379,"address":"100 Church St","structVal":668538.98,"contVal":334269.49},{"id":46071,"lng":-72.43524165,"lat":40.88214512,"occType":"RES1-3SNB","bldgType":"W","stories":3,"area":4825.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":12.3108,"address":"513 W Gate Rd","structVal":624470.17,"contVal":312235.08},{"id":46072,"lng":-72.42572313,"lat":40.87077991,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1044.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.3384,"address":"148 Old Point Rd","structVal":177019.05,"contVal":88509.53},{"id":46073,"lng":-72.42941674,"lat":40.87744594,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":1843.3,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":18.2633,"address":"Gwatney Flds","structVal":255997.78,"contVal":127998.89},{"id":46074,"lng":-72.43115544,"lat":40.87302619,"occType":"COM4","bldgType":"C","stories":2,"area":2707.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":11.0843,"address":"31 Church St","structVal":322693.47,"contVal":161346.74},{"id":46075,"lng":-72.4354115,"lat":40.8778375,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1027.3,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":16.417,"address":"527 W Gate Rd","structVal":168488.7,"contVal":84244.35},{"id":46076,"lng":-72.43606068,"lat":40.88106789,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1255.8,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":11.7022,"address":"517 W Gate Rd","structVal":218792.24,"contVal":109396.12},{"id":46077,"lng":-72.42344732,"lat":40.87596256,"occType":"RES1-2SNB","bldgType":"M","stories":2,"area":3071.1,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":13.7987,"address":"1 Old Point Rd E","structVal":533136.02,"contVal":266568.01},{"id":46078,"lng":-72.42422532,"lat":40.87900065,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":3388.0,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":16.7331,"address":"Old Point Rd","structVal":508410.83,"contVal":254205.41},{"id":46079,"lng":-72.4252335,"lat":40.87469,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2867.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":13.5607,"address":"130 Old Point Rd","structVal":369272.18,"contVal":184636.09},{"id":46080,"lng":-72.43332419,"lat":40.87684096,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":1727.5,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":17.3685,"address":"321 Little Beach Rd","structVal":249979.63,"contVal":124989.82},{"id":46082,"lng":-72.42617302,"lat":40.87314087,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":2098.7,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":10.6175,"address":"135 Arabash Rd","structVal":291470.23,"contVal":145735.12},{"id":46083,"lng":-72.42746844,"lat":40.87015221,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":2539.5,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":11.7831,"address":"Old Point Rd","structVal":367470.02,"contVal":183735.01},{"id":46084,"lng":-72.42857206,"lat":40.87518412,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":2703.2,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":15.9998,"address":"218 Church St","structVal":382339.19,"contVal":191169.6},{"id":46085,"lng":-72.4294825,"lat":40.8787095,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":1877.3,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":20.4519,"address":"312 Little Beach Rd","structVal":260715.54,"contVal":130357.77},{"id":46086,"lng":-72.4387545,"lat":40.8729465,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1043.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":6.7272,"address":"332 Little Beach Rd","structVal":171053.78,"contVal":85526.89},{"id":46087,"lng":-72.424721,"lat":40.883656,"occType":"RES1-2SWB","bldgType":"M","stories":2,"area":1663.6,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":24.2601,"address":"404 Middle Gate Rd","structVal":288794.36,"contVal":144397.18},{"id":46088,"lng":-72.424828,"lat":40.873245,"occType":"RES1-1SNB","bldgType":"M","stories":1,"area":1144.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":9.7344,"address":"133A Arabash Rd","structVal":196312.12,"contVal":98156.06},{"id":46089,"lng":-72.42640693,"lat":40.86872273,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1017.0,"foundType":"W","foundHt":1.5,"yrBuilt":1984,"groundElev":7.5995,"address":"165 Old Point Rd","structVal":150329.62,"contVal":75164.81},{"id":46090,"lng":-72.42715646,"lat":40.8726647,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":3543.5,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":12.2307,"address":"118 Old Point Rd","structVal":492124.06,"contVal":246062.03},{"id":46091,"lng":-72.435376,"lat":40.872278,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2054.7,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":10.5714,"address":"244 Cemetary Rd","structVal":285362.29,"contVal":142681.15},{"id":46092,"lng":-72.4367335,"lat":40.875376,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1004.3,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":13.0678,"address":"325 Little Beach Rd","structVal":158761.32,"contVal":79380.66},{"id":46093,"lng":-72.4251835,"lat":40.877206,"occType":"RES1-2SNB","bldgType":"M","stories":2,"area":3093.4,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":17.5714,"address":"114 Old Point Rd","structVal":502371.41,"contVal":251185.7},{"id":46094,"lng":-72.4255765,"lat":40.867554,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1604.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.2403,"address":"158 Old Point Rd","structVal":240735.97,"contVal":120367.99},{"id":46095,"lng":-72.4259475,"lat":40.87264,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2532.9,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":10.2455,"address":"134 Arabash Rd","structVal":326237.52,"contVal":163118.76},{"id":46096,"lng":-72.42536724,"lat":40.86934291,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":853.4,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.6069,"address":"3 E Creek Way","structVal":106222.81,"contVal":53111.4},{"id":46097,"lng":-72.4281155,"lat":40.8757975,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2254.9,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":16.4848,"address":"216 Church St","structVal":290433.7,"contVal":145216.85},{"id":46098,"lng":-72.430874,"lat":40.8819895,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1595.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":24.8841,"address":"432 Old Soldiers Rd","structVal":213828.86,"contVal":106914.43},{"id":46099,"lng":-72.43485159,"lat":40.87997187,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1970.4,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":14.9226,"address":"520 W Gate Rd","structVal":264155.15,"contVal":132077.57},{"id":46101,"lng":-72.424758,"lat":40.8759545,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1901.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":15.0273,"address":"117 Old Point Rd","structVal":275393.67,"contVal":137696.84},{"id":46102,"lng":-72.4262108,"lat":40.87595346,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1505.4,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":16.2879,"address":"Old Point Rd","structVal":193899.38,"contVal":96949.69},{"id":46103,"lng":-72.42644,"lat":40.879879,"occType":"RES1-2SWB","bldgType":"M","stories":2,"area":2262.5,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":21.4921,"address":"202 Church St","structVal":392776.94,"contVal":196388.47},{"id":46104,"lng":-72.43230522,"lat":40.87759256,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1273.5,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":19.3879,"address":"317 Little Beach Rd","structVal":186223.58,"contVal":93111.79},{"id":46105,"lng":-72.42369919,"lat":40.87225856,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2111.8,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":11.0907,"address":"131 Arabash Rd","structVal":293289.56,"contVal":146644.78},{"id":46106,"lng":-72.42455919,"lat":40.8828994,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":4219.2,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":20.6815,"address":"405 Middle Gate Rd","structVal":565637.47,"contVal":282818.73},{"id":46107,"lng":-72.4366144,"lat":40.88303988,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2202.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":22.0028,"address":"Sunset Trl","structVal":318977.02,"contVal":159488.51},{"id":46108,"lng":-72.42300689,"lat":40.87215407,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1172.5,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":10.3334,"address":"130 Arabash Rd","structVal":204277.64,"contVal":102138.82},{"id":46109,"lng":-72.4258695,"lat":40.879082,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":1412.3,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":19.9589,"address":"201 Church St","structVal":196144.95,"contVal":98072.47},{"id":46110,"lng":-72.42765248,"lat":40.87807618,"occType":"RES1-1SWB","bldgType":"W","stories":1,"area":1504.2,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":19.1521,"address":"209 Church St","structVal":246707.39,"contVal":123353.7},{"id":46111,"lng":-72.4308965,"lat":40.8818995,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":3052.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":25.1805,"address":"432 Old Soldiers Rd","structVal":363903.3,"contVal":181951.65},{"id":46112,"lng":-72.43135,"lat":40.8803425,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":2695.4,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":20.4398,"address":"424 Old Soldiers Rd","structVal":374342.71,"contVal":187171.35},{"id":46113,"lng":-72.43189723,"lat":40.87636373,"occType":"RES1-3SWB","bldgType":"C","stories":3,"area":2894.9,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":15.9878,"address":"521 W Gate Rd","structVal":465502.98,"contVal":232751.49},{"id":46114,"lng":-72.43669169,"lat":40.87462609,"occType":"RES1-1SNB","bldgType":"S","stories":1,"area":3220.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":14.9829,"address":"","structVal":573755.42,"contVal":860633.13},{"id":46115,"lng":-72.42627655,"lat":40.8744993,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":1665.6,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":13.7427,"address":"139 Old Point Rd","structVal":241019.56,"contVal":120509.78},{"id":46116,"lng":-72.427864,"lat":40.879909,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":1387.1,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":21.7841,"address":"306 Little Beach Rd","structVal":219268.03,"contVal":109634.01},{"id":46117,"lng":-72.43360162,"lat":40.8728396,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":935.9,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":3.62,"address":"241 W Church St","structVal":147954.66,"contVal":73977.33},{"id":46118,"lng":-72.42246311,"lat":40.87663017,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1293.4,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":13.6861,"address":"Old Point Rd E","structVal":192227.31,"contVal":96113.65},{"id":46119,"lng":-72.424416,"lat":40.8794665,"occType":"RES1-2SNB","bldgType":"S","stories":1,"area":3463.4,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":16.2709,"address":"","structVal":551176.15,"contVal":551176.15},{"id":46120,"lng":-72.425529,"lat":40.87395,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":1415.6,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":11.0631,"address":"138 Old Point Rd","structVal":223779.63,"contVal":111889.81},{"id":46121,"lng":-72.42725015,"lat":40.86867357,"occType":"IND3","bldgType":"C","stories":1,"area":31000.0,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":10.681,"address":"","structVal":4343308.85,"contVal":6514963.28},{"id":46122,"lng":-72.430734,"lat":40.880368,"occType":"RES2","bldgType":"H","stories":2,"area":1443.8,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":21.96,"address":"","structVal":317643.04,"contVal":158821.52},{"id":46123,"lng":-72.4257965,"lat":40.8682235,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":714.5,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.8124,"address":"169 Old Point Rd","structVal":102773.39,"contVal":51386.7},{"id":46124,"lng":-72.42698193,"lat":40.86917253,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1568.6,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.4915,"address":"Old Point Rd","structVal":186981.89,"contVal":93490.94},{"id":46125,"lng":-72.42271453,"lat":40.87226481,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":766.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.6188,"address":"130 Arabash Rd","structVal":110203.3,"contVal":55101.65},{"id":46126,"lng":-72.423927,"lat":40.88188483,"occType":"RES1-3SNB","bldgType":"C","stories":3,"area":2146.4,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":20.6209,"address":"100 E Gate Rd","structVal":338272.32,"contVal":169136.16},{"id":46128,"lng":-72.42233369,"lat":40.87476561,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1804.1,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":11.1577,"address":"122 Arabash Rd","structVal":215044.43,"contVal":107522.21},{"id":46129,"lng":-72.42485741,"lat":40.88131819,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2117.3,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":20.9997,"address":"Church St","structVal":283856.39,"contVal":141928.19},{"id":46130,"lng":-72.425402,"lat":40.873291,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2557.3,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":9.5356,"address":"133 Arabash Rd","structVal":329380.24,"contVal":164690.12},{"id":46131,"lng":-72.42671861,"lat":40.8792583,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":2191.6,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":20.3269,"address":"204 Church St","structVal":304369.41,"contVal":152184.7},{"id":46132,"lng":-72.4364715,"lat":40.880092,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1419.3,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":17.6341,"address":"W Gate Rd","structVal":190279.98,"contVal":95139.99},{"id":46133,"lng":-72.42388178,"lat":40.87296006,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":1840.3,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":11.6142,"address":"128 Arabash Rd","structVal":266297.61,"contVal":133148.81},{"id":46134,"lng":-72.4245155,"lat":40.8767865,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1757.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":15.1675,"address":"115 Old Point Rd","structVal":263772.29,"contVal":131886.15},{"id":46135,"lng":-72.4245615,"lat":40.871439,"occType":"RES1-2SNB","bldgType":"M","stories":2,"area":719.3,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.1389,"address":"Oyster Pond Rd","structVal":109906.29,"contVal":54953.14},{"id":46136,"lng":-72.42483933,"lat":40.88060502,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":815.8,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":21.1868,"address":"103 Old Point Rd","structVal":142134.9,"contVal":71067.45},{"id":46137,"lng":-72.43044198,"lat":40.87032866,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2808.0,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":12.4752,"address":"Dump Rd","structVal":349494.91,"contVal":174747.46},{"id":46138,"lng":-72.42929399,"lat":40.86864923,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1326.1,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.8694,"address":"Swamp Rd","structVal":165054.2,"contVal":82527.1},{"id":46139,"lng":-72.43337372,"lat":40.87200981,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2334.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.7835,"address":"240 W Church St","structVal":290610.99,"contVal":145305.5},{"id":46140,"lng":-72.43544623,"lat":40.87353078,"occType":"RES1-2SNB","bldgType":"M","stories":2,"area":4243.1,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":11.7568,"address":"248 W Church St","structVal":648348.74,"contVal":324174.37},{"id":46141,"lng":-72.42650616,"lat":40.86618957,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1401.3,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.5492,"address":"162 Old Point Rd","structVal":208260.87,"contVal":104130.43},{"id":46142,"lng":-72.4271617,"lat":40.87765256,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":2717.7,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":19.2134,"address":"211 Church St","structVal":377434.18,"contVal":188717.09},{"id":46143,"lng":-72.42749668,"lat":40.88105447,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":2097.9,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":22.187,"address":"304B Little Beach Rd","structVal":303568.73,"contVal":151784.37},{"id":46144,"lng":-72.42860198,"lat":40.87346834,"occType":"RES1-1SWB","bldgType":"W","stories":1,"area":878.6,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":15.1926,"address":"222 Church St","structVal":144096.94,"contVal":72048.47},{"id":46145,"lng":-72.42782057,"lat":40.86598172,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2520.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.4312,"address":"161 Old Point Rd","structVal":313756.32,"contVal":156878.16},{"id":46146,"lng":-72.42811121,"lat":40.87686803,"occType":"RES1-3SNB","bldgType":"W","stories":3,"area":6017.9,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":16.9149,"address":"Gwatney Flds","structVal":754638.39,"contVal":377319.2},{"id":46147,"lng":-72.4285944,"lat":40.87683607,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":6678.3,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":18.1993,"address":"Gwatney Flds","structVal":966379.62,"contVal":483189.81},{"id":46148,"lng":-72.4319505,"lat":40.880429,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":3534.4,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":20.9638,"address":"","structVal":421298.1,"contVal":210649.05},{"id":46149,"lng":-72.43549525,"lat":40.87391863,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2512.1,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":13.3858,"address":"250 W Church St","structVal":323553.33,"contVal":161776.66},{"id":46150,"lng":-72.4376902,"lat":40.87397986,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1446.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":13.2485,"address":"Little Beach Rd","structVal":217102.69,"contVal":108551.35},{"id":46151,"lng":-72.43829629,"lat":40.87402757,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1168.1,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":11.7569,"address":"327 Little Beach Rd","structVal":168025.26,"contVal":84012.63},{"id":46152,"lng":-72.42360128,"lat":40.87138665,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1116.4,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.8728,"address":"Oyster Pond Rd","structVal":138949.87,"contVal":69474.93},{"id":46153,"lng":-72.4312585,"lat":40.87960738,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1572.1,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":21.2972,"address":"","structVal":202483.9,"contVal":101241.95},{"id":46154,"lng":-72.43834018,"lat":40.87578887,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":929.6,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":9.7027,"address":"Cuffee Dr","structVal":131475.83,"contVal":65737.92},{"id":46155,"lng":-72.4231345,"lat":40.8753315,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":609.3,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":14.9606,"address":"121 Arabash Rd","structVal":90558.09,"contVal":45279.04},{"id":46156,"lng":-72.4235165,"lat":40.8803545,"occType":"RES1-1SNB","bldgType":"M","stories":1,"area":1285.4,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":17.4514,"address":"","structVal":223664.82,"contVal":111832.41},{"id":46157,"lng":-72.42576071,"lat":40.88163783,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1700.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":23.12,"address":"301 Little Beach Rd","structVal":268736.0,"contVal":134368.0},{"id":46158,"lng":-72.4268222,"lat":40.87659356,"occType":"RES2","bldgType":"H","stories":1,"area":1500.0,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":17.2267,"address":"214 Church St","structVal":186000.0,"contVal":93000.0},{"id":46159,"lng":-72.4302235,"lat":40.8693965,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1449.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.5191,"address":"Dump Rd","structVal":252607.38,"contVal":126303.69},{"id":46160,"lng":-72.437103,"lat":40.8776605,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1267.7,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":13.7735,"address":"Fishcow Lndg","structVal":179302.07,"contVal":89651.04},{"id":46161,"lng":-72.425157,"lat":40.8789515,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":877.6,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":17.8411,"address":"107 Old Point Rd","structVal":124124.35,"contVal":62062.17},{"id":46162,"lng":-72.43077588,"lat":40.86938318,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2533.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.5036,"address":"Swamp Rd","structVal":366905.82,"contVal":183452.91},{"id":46163,"lng":-72.43914825,"lat":40.87466616,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1684.2,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":9.3436,"address":"330 Little Beach Rd","structVal":243710.77,"contVal":121855.38},{"id":46164,"lng":-72.4267725,"lat":40.870313,"occType":"RES1-2SNB","bldgType":"M","stories":2,"area":2744.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.7663,"address":"149 Old Point Rd","structVal":419387.1,"contVal":209693.55},{"id":46165,"lng":-72.43538171,"lat":40.88160709,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":4168.6,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":16.8291,"address":"512 W Gate Rd","structVal":518843.12,"contVal":259421.56},{"id":46166,"lng":-72.4361375,"lat":40.878974,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1509.8,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":14.1463,"address":"523 W Gate Rd","structVal":217166.76,"contVal":108583.38},{"id":46167,"lng":-72.426773,"lat":40.8767685,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":1812.7,"foundType":"W","foundHt":2.0,"yrBuilt":1984,"groundElev":17.5869,"address":"213 Church St","structVal":224161.28,"contVal":112080.64},{"id":46168,"lng":-72.42917953,"lat":40.87895516,"occType":"RES1-1SWB","bldgType":"W","stories":1,"area":1099.2,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":20.3155,"address":"310 Little Beach Rd","structVal":180274.31,"contVal":90137.16},{"id":46169,"lng":-72.43602012,"lat":40.87573002,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":3355.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":15.5866,"address":"324 Little Beach Rd","structVal":503602.78,"contVal":251801.39},{"id":46170,"lng":-72.4240355,"lat":40.877706,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1316.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":10.093,"address":"112 Old Point Rd","structVal":156971.38,"contVal":78485.69},{"id":46171,"lng":-72.42874526,"lat":40.88269109,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1155.1,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":24.2173,"address":"415 Old Soldiers Rd","structVal":163383.0,"contVal":81691.5},{"id":46172,"lng":-72.4364755,"lat":40.876303,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2379.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":12.2117,"address":"Cuffee Dr","structVal":344505.26,"contVal":172252.63},{"id":47561,"lng":-72.42401317,"lat":40.88080366,"occType":"RES1-3SNB","bldgType":"C","stories":3,"area":3000.7,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":19.8721,"address":"102 Old Point Rd","structVal":482510.95,"contVal":241255.48},{"id":47562,"lng":-72.4255175,"lat":40.880316,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2183.2,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":21.124,"address":"200 Church St","structVal":292688.52,"contVal":146344.26},{"id":47563,"lng":-72.42597665,"lat":40.8752578,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":4762.5,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":16.7521,"address":"136 Old Point Rd","structVal":689147.01,"contVal":344573.51},{"id":47564,"lng":-72.4288811,"lat":40.87810698,"occType":"RES2","bldgType":"H","stories":1,"area":921.1,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":18.1382,"address":"Gwatney Flds","structVal":114218.01,"contVal":57109.01},{"id":47565,"lng":-72.43197879,"lat":40.87159615,"occType":"COM2","bldgType":"W","stories":1,"area":2692.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.4145,"address":"","structVal":328509.18,"contVal":328509.18},{"id":47566,"lng":-72.43598415,"lat":40.87926857,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":3416.3,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":18.475,"address":"522 W Gate Rd","structVal":512669.65,"contVal":256334.82},{"id":47567,"lng":-72.4286944,"lat":40.88178921,"occType":"RES1-1SWB","bldgType":"W","stories":1,"area":1322.5,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":24.1795,"address":"417 Old Soldiers Rd","structVal":216894.02,"contVal":108447.01},{"id":47568,"lng":-72.43498731,"lat":40.88300404,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1513.8,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":18.7947,"address":"508 Sunset Trl","structVal":210238.49,"contVal":105119.24},{"id":47569,"lng":-72.42347426,"lat":40.87880054,"occType":"RES2","bldgType":"H","stories":1,"area":1500.0,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":11.3179,"address":"109 Old Point Rd","structVal":165600.0,"contVal":82800.0},{"id":47570,"lng":-72.427053,"lat":40.8749255,"occType":"RES1-1SWB","bldgType":"W","stories":1,"area":720.7,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":17.6928,"address":"217 Church St","structVal":118197.29,"contVal":59098.64},{"id":47571,"lng":-72.43207071,"lat":40.87192941,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1056.5,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.7475,"address":"228 Round Swamp Rd","structVal":125935.99,"contVal":62968.0},{"id":47572,"lng":-72.4364405,"lat":40.8836125,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1556.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":19.91,"address":"Sunset Trl","structVal":233605.53,"contVal":116802.76},{"id":47573,"lng":-72.4367051,"lat":40.87837329,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1223.9,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":13.5096,"address":"Fishcow Lndg","structVal":213239.72,"contVal":106619.86},{"id":47574,"lng":-72.437747,"lat":40.872572,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":814.5,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.7579,"address":"247 Cemetary Rd","structVal":138013.45,"contVal":69006.73},{"id":47575,"lng":-72.42418127,"lat":40.87409184,"occType":"RES3A","bldgType":"W","stories":2,"area":3761.5,"foundType":"S","foundHt":2.0,"yrBuilt":1984,"groundElev":12.1106,"address":"125 Arabash Rd","structVal":504281.74,"contVal":252140.87},{"id":47576,"lng":-72.4259035,"lat":40.8716415,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2943.8,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.3262,"address":"144 Old Point Rd","structVal":441755.4,"contVal":220877.7},{"id":47577,"lng":-72.42659296,"lat":40.87729119,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":2135.6,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":16.4469,"address":"210 Church St","structVal":296589.35,"contVal":148294.68},{"id":47578,"lng":-72.42673495,"lat":40.86991075,"occType":"RES1-1SNB","bldgType":"M","stories":1,"area":1675.5,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.742,"address":"150 Old Point Rd","structVal":334437.78,"contVal":167218.89},{"id":47579,"lng":-72.4279365,"lat":40.8827975,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1879.3,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":23.5094,"address":"414 Old Soldiers Rd","structVal":260999.13,"contVal":130499.56},{"id":47580,"lng":-72.429911,"lat":40.8825405,"occType":"RES1-3SNB","bldgType":"C","stories":3,"area":2791.2,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":24.4307,"address":"419 Old Soldiers Rd","structVal":428733.85,"contVal":214366.92},{"id":47581,"lng":-72.434029,"lat":40.87205,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2414.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":6.4163,"address":"242 W Church St","structVal":362353.54,"contVal":181176.77},{"id":47582,"lng":-72.42519557,"lat":40.8778531,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":2072.7,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":17.6602,"address":"110 Old Point Rd","structVal":299927.98,"contVal":149963.99},{"id":47583,"lng":-72.431826,"lat":40.8712075,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1059.6,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":10.0172,"address":"231 Round Swamp Rd","structVal":147160.86,"contVal":73580.43},{"id":47584,"lng":-72.4362155,"lat":40.8737365,"occType":"RES1-3SNB","bldgType":"C","stories":3,"area":2456.8,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":11.6657,"address":"251 W Church St","structVal":395054.24,"contVal":197527.12},{"id":47585,"lng":-72.42213794,"lat":40.87358577,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2752.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.721,"address":"","structVal":413006.14,"contVal":206503.07},{"id":47586,"lng":-72.4234545,"lat":40.8765895,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1058.3,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":13.7071,"address":"Old Point Rd E","structVal":152230.19,"contVal":76115.09},{"id":47587,"lng":-72.4259345,"lat":40.868417,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":994.3,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":7.1302,"address":"169 Old Point Rd","structVal":143015.37,"contVal":71507.68},{"id":47588,"lng":-72.42626349,"lat":40.87826703,"occType":"RES1-3SWB","bldgType":"W","stories":3,"area":4230.2,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":18.8663,"address":"206 Church St","structVal":559402.97,"contVal":279701.49},{"id":47589,"lng":-72.4298555,"lat":40.8729825,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":1891.7,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":13.2662,"address":"225 Church St","structVal":262715.96,"contVal":131357.98},{"id":47590,"lng":-72.43478,"lat":40.8805925,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1458.2,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":19.4668,"address":"518 W Gate Rd","structVal":230517.0,"contVal":115258.5},{"id":47591,"lng":-72.4227455,"lat":40.8741595,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1534.8,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.9099,"address":"124 Arabash Rd","structVal":222235.56,"contVal":111117.78},{"id":47592,"lng":-72.426904,"lat":40.873941,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":2754.9,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":13.4198,"address":"141 Old Point Rd","structVal":382600.51,"contVal":191300.26},{"id":47593,"lng":-72.43065323,"lat":40.88095157,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":3033.3,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":21.9209,"address":"","structVal":421267.48,"contVal":210633.74},{"id":47594,"lng":-72.42315446,"lat":40.87754025,"occType":"RES1-3SWB","bldgType":"C","stories":1,"area":2545.6,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":12.2787,"address":"","structVal":476101.17,"contVal":238050.58},{"id":47595,"lng":-72.43116813,"lat":40.87011833,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":2157.5,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":9.1598,"address":"238 Round Swamp Rd","structVal":299636.38,"contVal":149818.19},{"id":47596,"lng":-72.4317225,"lat":40.878171,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1986.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":20.0682,"address":"315 Little Beach Rd","structVal":255790.88,"contVal":127895.44},{"id":47597,"lng":-72.43671102,"lat":40.87629117,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":741.2,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":10.7416,"address":"325 Cuffee Dr","structVal":117170.79,"contVal":58585.4},{"id":47598,"lng":-72.42573729,"lat":40.87595588,"occType":"COM4","bldgType":"M","stories":1,"area":1961.3,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":16.0775,"address":"","structVal":4343308.85,"contVal":6514963.28},{"id":47600,"lng":-72.42665374,"lat":40.87393846,"occType":"RES1-2SWB","bldgType":"C","stories":2,"area":1082.2,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":12.8498,"address":"141 Old Point Rd","structVal":150296.21,"contVal":75148.11},{"id":47601,"lng":-72.4268327,"lat":40.88113046,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1463.8,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":22.7498,"address":"304 Little Beach Rd","structVal":188540.79,"contVal":94270.39},{"id":47602,"lng":-72.42970753,"lat":40.87360282,"occType":"RES1-1SWB","bldgType":"W","stories":1,"area":978.4,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":14.3203,"address":"223 Church St","structVal":160467.23,"contVal":80233.62},{"id":47603,"lng":-72.43329889,"lat":40.87617657,"occType":"RES1-3SWB","bldgType":"C","stories":3,"area":2804.6,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":14.83,"address":"320 Little Beach Rd","structVal":450982.74,"contVal":225491.37},{"id":47604,"lng":-72.43376881,"lat":40.88079955,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":2366.3,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":21.3308,"address":"428 Old Soldiers Rd","structVal":317232.96,"contVal":158616.48},{"id":47605,"lng":-72.4252025,"lat":40.8819365,"occType":"RES1-1SWB","bldgType":"C","stories":1,"area":842.9,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":22.6378,"address":"300 Little Beach Rd","structVal":133238.2,"contVal":66619.1},{"id":47606,"lng":-72.4276055,"lat":40.8772135,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":941.3,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":18.0387,"address":"Church St","structVal":133133.23,"contVal":66566.61},{"id":47607,"lng":-72.43080078,"lat":40.87898162,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2884.5,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":21.2995,"address":"Little Beach Rd","structVal":371528.75,"contVal":185764.38},{"id":47608,"lng":-72.43446871,"lat":40.88399889,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1975.1,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":22.2405,"address":"504 W Gate Rd","structVal":254392.36,"contVal":127196.18},{"id":47609,"lng":-72.4366875,"lat":40.87668633,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":2228.1,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":12.1056,"address":"Cuffee Dr","structVal":265594.29,"contVal":132797.14},{"id":47610,"lng":-72.42249388,"lat":40.87291773,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1687.1,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":9.0177,"address":"129 Arabash Rd","structVal":201102.8,"contVal":100551.4},{"id":47611,"lng":-72.43111,"lat":40.876851,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":1935.3,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":16.3792,"address":"452 Little Beach Rd","structVal":280048.83,"contVal":140024.42},{"id":47612,"lng":-72.43609972,"lat":40.87728755,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":1566.7,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.8831,"address":"528 W Gate Rd","structVal":186751.12,"contVal":93375.56},{"id":47613,"lng":-72.43650058,"lat":40.88247981,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":3772.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":18.6754,"address":"Sunset Trl","structVal":566065.42,"contVal":283032.71},{"id":47614,"lng":-72.42222375,"lat":40.87638446,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1281.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":13.7242,"address":"Old Point Rd E","structVal":217091.61,"contVal":108545.81},{"id":47615,"lng":-72.424057,"lat":40.8782965,"occType":"RES1-2SNB","bldgType":"M","stories":2,"area":1812.3,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":14.4416,"address":"111 Old Point Rd","structVal":323321.81,"contVal":161660.91},{"id":47616,"lng":-72.42682551,"lat":40.87867044,"occType":"RES1-1SWB","bldgType":"W","stories":1,"area":1325.7,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":21.4436,"address":"205 Church St","structVal":217423.77,"contVal":108711.88},{"id":47617,"lng":-72.43477821,"lat":40.87624407,"occType":"RES2","bldgType":"H","stories":2,"area":1364.0,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":15.8955,"address":"322 Little Beach Rd","structVal":281521.34,"contVal":140760.67},{"id":47618,"lng":-72.43523,"lat":40.882748,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":1872.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":19.9192,"address":"511 W Gate Rd","structVal":280952.82,"contVal":140476.41},{"id":47619,"lng":-72.42178014,"lat":40.87540987,"occType":"RES1-2SNB","bldgType":"C","stories":2,"area":3091.2,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":11.353,"address":"Old Point Rd E","structVal":368466.27,"contVal":184233.14},{"id":47620,"lng":-72.425492,"lat":40.87635,"occType":"RES1-1SNB","bldgType":"C","stories":1,"area":1142.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":17.6276,"address":"Old Point Rd","structVal":161527.31,"contVal":80763.65},{"id":47621,"lng":-72.42627883,"lat":40.88178326,"occType":"RES1-3SWB","bldgType":"W","stories":3,"area":2823.2,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":23.7715,"address":"302 Little Beach Rd","structVal":373335.34,"contVal":186667.67},{"id":47622,"lng":-72.42796532,"lat":40.86678394,"occType":"RES1-3SNB","bldgType":"W","stories":3,"area":4513.1,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":7.8882,"address":"141 Old Point Rd","structVal":596805.73,"contVal":298402.87},{"id":47623,"lng":-72.432129,"lat":40.8698945,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":730.4,"foundType":"C","foundHt":1.5,"yrBuilt":1984,"groundElev":8.4181,"address":"235 Round Swamp Rd","structVal":108556.16,"contVal":54278.08},{"id":55283,"lng":-72.43539742,"lat":40.88486398,"occType":"RES1-1SNB","bldgType":"W","stories":1,"area":1254.0,"foundType":"C","foundHt":1.5,"yrBuilt":1970,"groundElev":4.141,"address":"4 Landing Ln","structVal":186374.5,"contVal":93187.25},{"id":55438,"lng":-72.4346115,"lat":40.885314,"occType":"COM8","bldgType":"W","stories":1,"area":1521.9,"foundType":"B","foundHt":0.5,"yrBuilt":1970,"groundElev":9.4179,"address":"","structVal":435466.64,"contVal":217733.32},{"id":55488,"lng":-72.43548433,"lat":40.88506806,"occType":"RES1-1SWB","bldgType":"W","stories":1,"area":720.0,"foundType":"B","foundHt":2.0,"yrBuilt":1970,"groundElev":5.6434,"address":"6 Landing Ln","structVal":118085.76,"contVal":59042.88},{"id":10001,"lng":-72.430403,"lat":40.871549,"occType":"EDU1","bldgType":"W","stories":3,"area":4196.0,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":13.6398,"address":"","structVal":1219627.49,"contVal":609813.75},{"id":10002,"lng":-72.423799,"lat":40.87056,"occType":"IND3","bldgType":"W","stories":1,"area":5010.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":7.8901,"address":"","structVal":701934.75,"contVal":350967.38},{"id":10003,"lng":-72.43101,"lat":40.871448,"occType":"RES1-2SWB","bldgType":"W","stories":2,"area":1972.0,"foundType":"B","foundHt":2.0,"yrBuilt":1984,"groundElev":13.6398,"address":"","structVal":285356.29,"contVal":142678.14},{"id":10004,"lng":-72.432346,"lat":40.87312,"occType":"RES1-2SNB","bldgType":"W","stories":2,"area":638.0,"foundType":"S","foundHt":0.5,"yrBuilt":1984,"groundElev":10.9379,"address":"","structVal":86767.07,"contVal":43383.54}];
+
+const NEW_RAW = [{"lng":-72.42393029,"lat":40.883936},{"lng":-72.4258748,"lat":40.8841812},{"lng":-72.4303248,"lat":40.8833636},{"lng":-72.43215414,"lat":40.87054414},{"lng":-72.4289508,"lat":40.8741036},{"lng":-72.4338746,"lat":40.8827822},{"lng":-72.4351748,"lat":40.8853092},{"lng":-72.4304518,"lat":40.8703198},{"lng":-72.43357385,"lat":40.88515008},{"lng":-72.435492,"lat":40.876129},{"lng":-72.42540886,"lat":40.86936143},{"lng":-72.4347764,"lat":40.8791658},{"lng":-72.4286212,"lat":40.8745864},{"lng":-72.4295582,"lat":40.8831982},{"lng":-72.4365582,"lat":40.872245},{"lng":-72.4274372,"lat":40.871887},{"lng":-72.4275836,"lat":40.8709534},{"lng":-72.42792015,"lat":40.88470346},{"lng":-72.427331,"lat":40.8839052},{"lng":-72.430299,"lat":40.8849076},{"lng":-72.4345766,"lat":40.8818348},{"lng":-72.4312374,"lat":40.8714138},{"lng":-72.4269828,"lat":40.8691134},{"lng":-72.43118473,"lat":40.88278891},{"lng":-72.4321452,"lat":40.8823194},{"lng":-72.4323054,"lat":40.8734354},{"lng":-72.4348832,"lat":40.876941},{"lng":-72.4264914,"lat":40.8838974},{"lng":-72.4316422,"lat":40.881605},{"lng":-72.4333306,"lat":40.8810746},{"lng":-72.4328396,"lat":40.8852238},{"lng":-72.4286472,"lat":40.870177},{"lng":-72.42876743,"lat":40.88443086},{"lng":-72.4286174,"lat":40.8734542},{"lng":-72.4234534,"lat":40.8797742},{"lng":-72.43189629,"lat":40.88344343},{"lng":-72.4323076,"lat":40.8733472},{"lng":-72.43225171,"lat":40.884223},{"lng":-72.431164,"lat":40.8846384},{"lng":-72.42374156,"lat":40.87053644},{"lng":-72.4260208,"lat":40.8839232},{"lng":-72.4302722,"lat":40.8843234},{"lng":-72.4275354,"lat":40.8840186},{"lng":-72.4274772,"lat":40.8734448},{"lng":-72.4276516,"lat":40.878059},{"lng":-72.434324,"lat":40.8769642},{"lng":-72.4330576,"lat":40.8780338},{"lng":-72.4332742,"lat":40.8821618},{"lng":-72.433654,"lat":40.8817594},{"lng":-72.4259822,"lat":40.8833964},{"lng":-72.4253572,"lat":40.8837532},{"lng":-72.4325132,"lat":40.8824},{"lng":-72.4358696,"lat":40.8805932},{"lng":-72.4249694,"lat":40.8841366},{"lng":-72.4277342,"lat":40.884147},{"lng":-72.4310184,"lat":40.8713336},{"lng":-72.4342092,"lat":40.8827256},{"lng":-72.4263896,"lat":40.884344},{"lng":-72.4276652,"lat":40.8843028},{"lng":-72.4280618,"lat":40.8780414},{"lng":-72.42707089,"lat":40.88338278},{"lng":-72.42735214,"lat":40.87700786},{"lng":-72.429575,"lat":40.8842948},{"lng":-72.43301714,"lat":40.88379529},{"lng":-72.43364629,"lat":40.88426557},{"lng":-72.4354464,"lat":40.8744302},{"lng":-72.4383392,"lat":40.8749272},{"lng":-72.43104522,"lat":40.88427911},{"lng":-72.4339266,"lat":40.8833806},{"lng":-72.43446029,"lat":40.88221414},{"lng":-72.4286944,"lat":40.8792314},{"lng":-72.4311652,"lat":40.870813},{"lng":-72.431205,"lat":40.8785662},{"lng":-72.427035,"lat":40.8844668},{"lng":-72.432288,"lat":40.882091},{"lng":-72.425342,"lat":40.884156},{"lng":-72.4325132,"lat":40.885214},{"lng":-72.4264016,"lat":40.8845124},{"lng":-72.4311766,"lat":40.8714908},{"lng":-72.4373466,"lat":40.8754468}];
+
+const ALL_BUILDINGS = [
+  ...NSI_RAW.map((b, i) => ({
+    uid: "nsi-" + i, type: "verify", nsiId: b.id,
+    lng: b.lng, lat: b.lat,
+    prefill: {
+      occType: b.occType || "", numStories: String(b.stories || ""),
+      firstFloorHeight: String(b.foundHt || ""), address: b.address || "",
+      basement: (b.occType||"").includes("WB") ? "Yes" : (b.occType||"").includes("NB") ? "No" : "",
+      foundationType: b.foundType || "", buildingType: b.bldgType || "",
+      area: String(b.area || ""), yearBuilt: String(b.yrBuilt || ""),
+      groundElev: String(b.groundElev || ""),
+      structureValue: String(b.structVal || ""), contentValue: String(b.contVal || ""),
+      notes: "", surveyor: "",
+    }
+  })),
+  ...NEW_RAW.map((b, i) => ({
+    uid: "new-" + i, type: "survey",
+    lng: b.lng, lat: b.lat, prefill: null,
+  }))
+];
+
+const OCC_TYPES = [
+  { code: "RES1", label: "RES1 — Single Family Dwelling" },
+  { code: "RES2", label: "RES2 — Manufactured Housing" },
+  { code: "RES3A", label: "RES3A — Multi Family (Duplex)" },
+  { code: "RES3B", label: "RES3B — Multi Family (3–4 Units)" },
+  { code: "RES3C", label: "RES3C — Multi Family (5–9 Units)" },
+  { code: "RES3D", label: "RES3D — Multi Family (10–19 Units)" },
+  { code: "RES3E", label: "RES3E — Multi Family (20–49 Units)" },
+  { code: "RES3F", label: "RES3F — Multi Family (50+ Units)" },
+  { code: "RES4", label: "RES4 — Temporary Lodging" },
+  { code: "RES5", label: "RES5 — Institutional Dormitory" },
+  { code: "RES6", label: "RES6 — Nursing Home" },
+  { code: "COM1", label: "COM1 — Retail Trade" },
+  { code: "COM2", label: "COM2 — Wholesale Trade" },
+  { code: "COM3", label: "COM3 — Personal & Repair Services" },
+  { code: "COM4", label: "COM4 — Professional/Technical" },
+  { code: "COM5", label: "COM5 — Banks/Financial" },
+  { code: "COM6", label: "COM6 — Hospital" },
+  { code: "COM7", label: "COM7 — Medical Office/Clinic" },
+  { code: "COM8", label: "COM8 — Entertainment & Recreation" },
+  { code: "COM9", label: "COM9 — Theaters" },
+  { code: "COM10", label: "COM10 — Parking" },
+  { code: "IND1", label: "IND1 — Heavy Industrial" },
+  { code: "IND2", label: "IND2 — Light Industrial" },
+  { code: "IND3", label: "IND3 — Food/Drugs/Chemicals" },
+  { code: "IND4", label: "IND4 — Metals/Minerals Processing" },
+  { code: "IND5", label: "IND5 — High Technology" },
+  { code: "IND6", label: "IND6 — Construction" },
+  { code: "AGR1", label: "AGR1 — Agriculture" },
+  { code: "REL1", label: "REL1 — Church/Non-Profit" },
+  { code: "GOV1", label: "GOV1 — General Government" },
+  { code: "GOV2", label: "GOV2 — Emergency Response" },
+  { code: "EDU1", label: "EDU1 — Schools (K–12)" },
+  { code: "EDU2", label: "EDU2 — Colleges/Universities" },
+];
+
+const EMPTY_FORM = {
+  numStories: "", firstFloorHeight: "", basement: "", address: "",
+  occType: "", foundationType: "", buildingType: "", area: "",
+  yearBuilt: "", groundElev: "", structureValue: "", contentValue: "",
+  notes: "", surveyor: "",
+};
+
+// Google Sheets backend
+const API_URL = "https://script.google.com/a/macros/columbia.edu/s/AKfycbz1JngLW7islFebAYy3SJbHQASSYXe75zp2rQVMamA11SSPJIgfYlfyh7xXKpggm1PphQ/exec";
+
+async function fetchSurveys() {
+  try {
+    const r = await fetch(API_URL);
+    return await r.json();
+  } catch(e) { console.error("Fetch surveys failed:", e); return {}; }
+}
+
+async function saveSurveyEntry(uid, surveyType, nsiId, lng, lat, formData) {
+  try {
+    await fetch(API_URL, {
+      method: "POST", body: JSON.stringify({
+        action: "save",
+        data: {
+          uid,
+          survey_type: surveyType,
+          ID: nsiId || "",
+          occupancy_type: formData.occType || "",
+          building_type: formData.buildingType || "",
+          number_of_stories: formData.numStories || "",
+          area: formData.area || "",
+          foundation_type: formData.foundationType || "",
+          foundation_height: formData.firstFloorHeight || "",
+          year_built: formData.yearBuilt || "",
+          ground_elevation: formData.groundElev || "",
+          address: formData.address || "",
+          longitude: lng,
+          latitude: lat,
+          structure_value: formData.structureValue || "",
+          content_value: formData.contentValue || "",
+          basement: formData.basement || "",
+          notes: formData.notes || "",
+          surveyor: formData.surveyor || "",
+          savedAt: formData.savedAt || "",
+        }
+      })
+    });
+  } catch(e) { console.error("Save failed:", e); }
+}
+
+async function deleteSurveyEntry(uid) {
+  try {
+    await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "delete", uid }) });
+  } catch(e) { console.error("Delete failed:", e); }
+}
+
+async function fetchDevEdits() {
+  try {
+    const r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "getDev" }) });
+    return await r.json();
+  } catch(e) { console.error("Fetch dev edits failed:", e); return { removed: [], moved: {}, added: [] }; }
+}
+
+async function saveDevEditsRemote(d) {
+  try {
+    await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "saveDev", data: d }) });
+  } catch(e) { console.error("Save dev edits failed:", e); }
+}
+
+function applyDevEdits(base, edits) {
+  let list = base.filter(b => !edits.removed.includes(b.uid));
+  list = list.map(b => {
+    if (edits.moved[b.uid]) return { ...b, lat: edits.moved[b.uid].lat, lng: edits.moved[b.uid].lng };
+    return b;
+  });
+  edits.added.forEach(a => list.push(a));
+  return list;
+}
+
+function App() {
+  const mapRef = useRef(null);
+  const mapInst = useRef(null);
+  const markersRef = useRef({});
+
+  const [selected, setSelected] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [surveys, setSurveys] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [devMode, setDevMode] = useState(false);
+  const [devAction, setDevAction] = useState(null); // "move" | "add" | null
+  const [devEdits, setDevEdits] = useState({ removed: [], moved: {}, added: [] });
+  const [devDirty, setDevDirty] = useState(false);
+  const [devSyncing, setDevSyncing] = useState(false);
+  const [buildings, setBuildings] = useState(ALL_BUILDINGS);
+  const devEditsRef = useRef(devEdits);
+  const debounceTimerRef = useRef(null);
+
+  // Helper: update ref + state + buildings + localStorage synchronously, then auto-save to server
+  const commitDevEdits = useCallback((next) => {
+    // Add timestamp for conflict resolution
+    next._ts = Date.now();
+    devEditsRef.current = next;
+    setDevEdits(next);
+    setBuildings(applyDevEdits(ALL_BUILDINGS, next));
+    saveLocalDev(next);
+    setDevDirty(true);
+    // Auto-save to server with 3s debounce
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(async () => {
+      savingRef.current = true;
+      await saveDevEditsRemote(devEditsRef.current);
+      // Also clean up removed survey rows
+      for (const uid of (devEditsRef.current.removed||[])) {
+        await deleteSurveyEntry(uid);
+      }
+      setDevDirty(false);
+      savingRef.current = false;
+    }, 3000);
+  }, []);
+
+  // Warn before leaving with unsaved dev edits
+  useEffect(() => {
+    const handler = (e) => {
+      if (devDirty) { e.preventDefault(); e.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [devDirty]);
+
+  // Listen for localStorage changes from other tabs
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "nsi-dev-edits-local" && e.newValue) {
+        try {
+          const other = JSON.parse(e.newValue);
+          const mine = devEditsRef.current;
+          // Only accept if newer timestamp
+          if ((other._ts || 0) > (mine._ts || 0)) {
+            devEditsRef.current = other;
+            setDevEdits(other);
+            setBuildings(applyDevEdits(ALL_BUILDINGS, other));
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+  const savingRef = useRef(false);
+
+  // Dev edits: localStorage is primary (instant), Google Sheets is backup
+  function loadLocalDev() {
+    try { const r = localStorage.getItem("nsi-dev-edits-local"); return r ? JSON.parse(r) : null; }
+    catch { return null; }
+  }
+  function saveLocalDev(d) {
+    try { localStorage.setItem("nsi-dev-edits-local", JSON.stringify(d)); } catch(e) {}
+  }
+
+  const refreshSurveys = useCallback(async () => {
+    if (savingRef.current) return;
+    const s = await fetchSurveys();
+    if (savingRef.current) return;
+    setSurveys(s || {});
+  }, []);
+
+  useEffect(() => {
+    const localDev = loadLocalDev();
+    // Also fetch remote to compare
+    const initDev = async () => {
+      let best = { removed: [], moved: {}, added: [], _ts: 0 };
+      // Check local
+      if (localDev) {
+        if (!localDev.removed) localDev.removed = [];
+        if (!localDev.moved) localDev.moved = {};
+        if (!localDev.added) localDev.added = [];
+        if (!localDev._ts) localDev._ts = 1;
+        best = localDev;
+      }
+      // Check remote
+      try {
+        const remote = await fetchDevEdits();
+        if (remote) {
+          if (!remote.removed) remote.removed = [];
+          if (!remote.moved) remote.moved = {};
+          if (!remote.added) remote.added = [];
+          if (!remote._ts) remote._ts = 0;
+          // Use whichever is newer
+          if (remote._ts > best._ts) best = remote;
+        }
+      } catch {}
+      devEditsRef.current = best;
+      setDevEdits(best);
+      setBuildings(applyDevEdits(ALL_BUILDINGS, best));
+      saveLocalDev(best);
+    };
+    initDev();
+    // Load surveys from Google Sheets
+    fetchSurveys().then(s => { setSurveys(s || {}); setLoading(false); });
+    // Poll only surveys every 30s
+    const interval = setInterval(refreshSurveys, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const showToast = useCallback((msg, type="success") => {
+    setToast({msg,type}); setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  useEffect(() => {
+    if (mapInst.current || !mapRef.current) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+    document.head.appendChild(link);
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+    script.onload = () => {
+      const L = window.L;
+      const map = L.map(mapRef.current, { zoomControl: false }).setView([40.877, -72.431], 14);
+      L.control.zoom({ position: "topright" }).addTo(map);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OSM", maxZoom: 19,
+      }).addTo(map);
+      mapInst.current = map;
+
+      map.on("click", (e) => {
+        if (window.__devAction === "move" && window.__devSelected) {
+          window.__devMove(e.latlng.lat, e.latlng.lng);
+        } else if (window.__devAction === "add") {
+          window.__devAdd(e.latlng.lat, e.latlng.lng);
+        }
+      });
+    };
+    document.head.appendChild(script);
+  }, []);
+
+  // Sync markers with buildings state
+  useEffect(() => {
+    if (!mapInst.current || !window.L) return;
+    const L = window.L;
+    // Remove old markers
+    Object.values(markersRef.current).forEach(m => m.remove());
+    markersRef.current = {};
+    // Create fresh
+    buildings.forEach(b => {
+      const isV = b.type === "verify";
+      const m = L.circleMarker([b.lat, b.lng], {
+        radius: isV ? 6 : 7,
+        fillColor: isV ? "#3b82f6" : "#ef4444",
+        color: "#fff", weight: 1.5, fillOpacity: 0.85,
+      }).addTo(mapInst.current);
+      m.on("click", () => window.__sel(b.uid));
+      markersRef.current[b.uid] = m;
+    });
+  }, [buildings]);
+
+  // Update markers style
+  useEffect(() => {
+    buildings.forEach(b => {
+      const m = markersRef.current[b.uid];
+      if (!m) return;
+      const done = !!surveys[b.uid];
+      const isV = b.type === "verify";
+      const isSel = devMode && b.uid === selected;
+      let show = true;
+      if (filter === "survey") show = !isV;
+      else if (filter === "verify") show = isV;
+      else if (filter === "done") show = done;
+      else if (filter === "pending") show = b.type==="survey" && !done;
+
+      m.setStyle({
+        fillColor: done ? "#22c55e" : isV ? "#3b82f6" : "#ef4444",
+        color: isSel ? "#fbbf24" : "#fff",
+        weight: isSel ? 3 : 1.5,
+        opacity: show ? 1 : 0.08,
+        fillOpacity: show ? 0.85 : 0.05,
+        radius: isSel ? 10 : (show ? (isV ? 6 : 7) : 3),
+      });
+    });
+  }, [surveys, filter, buildings, selected, devMode]);
+
+  useEffect(() => {
+    window.__sel = (uid) => {
+      if (window.__devAction) return; // don't select during dev actions
+      const b = buildings.find(x => x.uid === uid);
+      if (!b) return;
+      setSelected(uid);
+      const existing = surveys[uid];
+      if (existing) setForm({...EMPTY_FORM, ...existing});
+      else if (b.prefill) setForm({...EMPTY_FORM, ...b.prefill});
+      else setForm(EMPTY_FORM);
+      if (mapInst.current) mapInst.current.setView([b.lat, b.lng], 17, {animate: true});
+    };
+    return () => { delete window.__sel; };
+  }, [surveys, buildings]);
+
+  // Dev mode handlers exposed to map click
+  useEffect(() => {
+    window.__devAction = devAction;
+    window.__devSelected = selected;
+  }, [devAction, selected]);
+
+  useEffect(() => {
+    window.__devMove = (lat, lng) => {
+      if (!selected) return;
+      const cur = devEditsRef.current;
+      const next = { ...cur, moved: { ...cur.moved, [selected]: { lat, lng } } };
+      commitDevEdits(next);
+      setDevAction(null);
+      showToast("Point moved — auto-saving...");
+    };
+    window.__devAdd = (lat, lng) => {
+      const cur = devEditsRef.current;
+      const uid = "added-" + Date.now();
+      const newPt = { uid, type: "survey", lng, lat, prefill: null };
+      const next = { ...cur, added: [...(cur.added||[]), newPt] };
+      commitDevEdits(next);
+      setDevAction(null);
+      showToast("Point added — auto-saving...");
+    };
+    return () => { delete window.__devMove; delete window.__devAdd; };
+  }, [selected, showToast, commitDevEdits]);
+
+  const devRemove = () => {
+    if (!selected) return;
+    const cur = devEditsRef.current;
+    const newMoved = { ...cur.moved };
+    delete newMoved[selected];
+    const next = {
+      removed: [...(cur.removed||[]), selected],
+      moved: newMoved,
+      added: (cur.added||[]).filter(a => a.uid !== selected),
+    };
+    commitDevEdits(next);
+    setSurveys(prev => { const u = {...prev}; delete u[selected]; return u; });
+    setSelected(null); setForm(EMPTY_FORM);
+    showToast("Point removed — auto-saving...", "info");
+  };
+
+  const devResetAll = async () => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    savingRef.current = true;
+    const fresh = { removed: [], moved: {}, added: [], _ts: Date.now() };
+    devEditsRef.current = fresh;
+    setDevEdits(fresh);
+    setBuildings(applyDevEdits(ALL_BUILDINGS, fresh));
+    saveLocalDev(fresh);
+    setSelected(null); setForm(EMPTY_FORM);
+    await saveDevEditsRemote(fresh);
+    setDevDirty(false);
+    savingRef.current = false;
+    showToast("All dev edits reset & synced", "info");
+  };
+
+  const devSyncToServer = async () => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    savingRef.current = true;
+    setDevSyncing(true);
+    const cur = devEditsRef.current;
+    await saveDevEditsRemote(cur);
+    for (const uid of (cur.removed||[])) {
+      await deleteSurveyEntry(uid);
+    }
+    setDevDirty(false);
+    setDevSyncing(false);
+    savingRef.current = false;
+    showToast("Dev edits synced to Google Sheet!");
+  };
+
+  const handleSave = async () => {
+    if (!form.numStories || !form.occType) {
+      showToast("Stories and occupancy type required", "error"); return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    const b = buildings.find(x => x.uid === selected);
+    const entry = {...form, savedAt: new Date().toISOString()};
+    setSurveys(prev => ({...prev, [selected]: entry}));
+    await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, entry);
+    setSaving(false); showToast("Saved & synced!");
+    savingRef.current = false;
+  };
+
+  const handleClear = async () => {
+    if (selected == null) return;
+    savingRef.current = true;
+    setSurveys(prev => { const u = {...prev}; delete u[selected]; return u; });
+    await deleteSurveyEntry(selected);
+    const b = buildings.find(x => x.uid === selected);
+    setForm(b?.prefill ? {...EMPTY_FORM, ...b.prefill} : EMPTY_FORM);
+    showToast("Cleared", "info");
+    savingRef.current = false;
+  };
+
+  const navigateToBuilding = () => {
+    if (!selected) return;
+    const b = buildings.find(x => x.uid === selected);
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${b.lat},${b.lng}&travelmode=driving`, "_blank");
+  };
+
+  const goToNearest = () => {
+    if (!navigator.geolocation) { showToast("No geolocation", "error"); return; }
+    navigator.geolocation.getCurrentPosition(pos => {
+      const {latitude, longitude} = pos.coords;
+      let minD = Infinity, near = null;
+      buildings.forEach(b => {
+        if (surveys[b.uid]) return;
+        const d = Math.sqrt((b.lat-latitude)**2 + (b.lng-longitude)**2);
+        if (d < minD) { minD = d; near = b.uid; }
+      });
+      if (near) window.__sel(near);
+    }, () => showToast("Location denied", "error"));
+  };
+
+  const exportCSV = () => {
+    let csv = "uid,survey_type,ID,occupancy_type,building_type,number_of_stories,area,foundation_type,foundation_height,year_built,ground_elevation,address,longitude,latitude,structure_value,content_value,basement,notes,surveyor,savedAt\n";
+    buildings.forEach(b => {
+      const s = surveys[b.uid];
+      if (!s) return;
+      const esc = v => `"${(String(v)||"").replace(/"/g,'""')}"`;
+      csv += [b.uid,b.type,b.nsiId||"",s.occType,s.buildingType||"",s.numStories,s.area||"",s.foundationType||"",s.firstFloorHeight,s.yearBuilt||"",s.groundElev||"",esc(s.address),b.lng,b.lat,s.structureValue||"",s.contentValue||"",s.basement,esc(s.notes),esc(s.surveyor),s.savedAt].join(",") + "\n";
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+    a.download = "nsi_survey_export.csv"; a.click();
+    showToast("CSV exported");
+  };
+
+  const verifyCount = buildings.filter(b => b.type==="verify").length;
+  const surveyCount = buildings.filter(b => b.type==="survey").length;
+  const doneCount = buildings.filter(b => surveys[b.uid]).length;
+  const pct = buildings.length ? Math.round((doneCount / buildings.length) * 100) : 0;
+  const todoCount = buildings.filter(b => b.type==="survey" && !surveys[b.uid]).length;
+  const selB = selected ? buildings.find(x => x.uid === selected) : null;
+  const allUids = buildings.map(b => b.uid);
+  const devEditCount = devEdits.removed.length + Object.keys(devEdits.moved).length + devEdits.added.length;
+
+  return (
+    <div style={{display:"flex",height:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#0f172a",color:"#e2e8f0"}}>
+      {toast && (
+        <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:10000,
+          padding:"10px 24px",borderRadius:8,
+          background:toast.type==="error"?"#dc2626":toast.type==="info"?"#2563eb":"#16a34a",
+          color:"#fff",fontWeight:600,fontSize:14,boxShadow:"0 4px 20px rgba(0,0,0,.4)"}}>{toast.msg}</div>
+      )}
+
+      <div style={{width:400,minWidth:400,display:"flex",flexDirection:"column",borderRight:"1px solid #1e293b",background:"#0f172a",overflow:"hidden"}}>
+        <div style={{padding:"14px 18px",borderBottom:"1px solid #1e293b",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div style={{width:34,height:34,borderRadius:8,background:"linear-gradient(135deg,#3b82f6,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>🏗</div>
+            <div>
+              <div style={{fontWeight:700,fontSize:15,color:"#f8fafc"}}>NSI Field Survey Tool</div>
+              <div style={{fontSize:11,color:"#64748b"}}>Shinnecock Peninsula — {buildings.length} buildings</div>
+            </div>
+            <button onClick={()=>{setDevMode(d=>!d);setDevAction(null);}} title="Developer Mode" style={{
+              padding:"4px 8px",borderRadius:6,border:devMode?"2px solid #f59e0b":"1px solid #334155",cursor:"pointer",
+              background:devMode?"#422006":"#1e293b",color:devMode?"#fbbf24":"#64748b",fontSize:11,fontWeight:700,
+            }}>⚙ DEV</button>
+          </div>
+
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#94a3b8",marginBottom:4}}>
+            <span>{doneCount} / {buildings.length} complete</span>
+            <span style={{fontWeight:600,color:pct===100?"#22c55e":"#f59e0b"}}>{pct}%</span>
+          </div>
+          <div style={{height:5,borderRadius:3,background:"#1e293b"}}>
+            <div style={{height:5,borderRadius:3,background:pct===100?"#22c55e":"linear-gradient(90deg,#3b82f6,#8b5cf6)",width:`${pct}%`,transition:"width .4s"}}/>
+          </div>
+
+          <div style={{display:"flex",gap:12,marginTop:8,fontSize:11,color:"#94a3b8"}}>
+            <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#ef4444",marginRight:4,verticalAlign:"middle"}}/>New ({surveyCount})</span>
+            <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#3b82f6",marginRight:4,verticalAlign:"middle"}}/>Verify ({verifyCount})</span>
+            <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#22c55e",marginRight:4,verticalAlign:"middle"}}/>Done ({doneCount})</span>
+          </div>
+
+          <div style={{display:"flex",gap:4,marginTop:8}}>
+            {[["all","All",buildings.length],["survey","New",surveyCount],["verify","Verify",verifyCount],["done","Done",doneCount],["pending","Todo",todoCount]].map(([k,l,n])=>(
+              <button key={k} onClick={()=>setFilter(k)} style={{
+                flex:1,padding:"4px 0",borderRadius:5,border:"none",cursor:"pointer",fontSize:10,fontWeight:600,
+                background:filter===k?"#3b82f6":"#1e293b",color:filter===k?"#fff":"#94a3b8",
+              }}>{l} ({n})</button>
+            ))}
+          </div>
+
+          <div style={{display:"flex",gap:5,marginTop:8}}>
+            <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest Unsurveyed</button>
+            <button onClick={exportCSV} style={abtn("#7c3aed")}>📥 Export CSV</button>
+          </div>
+
+          {/* Developer Mode Panel */}
+          {devMode && (
+            <div style={{marginTop:10,padding:"10px 12px",borderRadius:8,background:"#1c1917",border:"1px solid #422006"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#fbbf24",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>⚙ Developer Mode</div>
+
+              <div style={{display:"flex",gap:5,marginBottom:8}}>
+                <button onClick={()=>setDevAction(devAction==="add"?null:"add")} style={{
+                  flex:1,padding:"6px",borderRadius:6,border:devAction==="add"?"2px solid #22c55e":"1px solid #334155",
+                  cursor:"pointer",background:devAction==="add"?"#14532d":"#1e293b",
+                  color:devAction==="add"?"#4ade80":"#94a3b8",fontWeight:600,fontSize:11,
+                }}>{devAction==="add"?"🟢 Click Map...":"➕ Add Point"}</button>
+                <button onClick={()=>{
+                  if (!selected) { showToast("Select a point first","error"); return; }
+                  setDevAction(devAction==="move"?null:"move");
+                }} style={{
+                  flex:1,padding:"6px",borderRadius:6,border:devAction==="move"?"2px solid #3b82f6":"1px solid #334155",
+                  cursor:"pointer",background:devAction==="move"?"#1e3a5f":"#1e293b",
+                  color:devAction==="move"?"#60a5fa":"#94a3b8",fontWeight:600,fontSize:11,
+                }}>{devAction==="move"?"🔵 Click Map...":"✥ Move Point"}</button>
+              </div>
+              <div style={{display:"flex",gap:5}}>
+                <button onClick={()=>{
+                  if (!selected) { showToast("Select a point first","error"); return; }
+                  if (confirm("Remove this building point?")) devRemove();
+                }} style={{flex:1,padding:"6px",borderRadius:6,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:11}}>
+                  🗑 Remove Point
+                </button>
+                {devEditCount > 0 && (
+                  <button onClick={()=>{ if (confirm("Reset ALL dev edits (moves, removes, adds)?")) devResetAll(); }} style={{
+                    flex:1,padding:"6px",borderRadius:6,border:"1px solid #334155",cursor:"pointer",background:"#1e293b",color:"#f59e0b",fontWeight:600,fontSize:11,
+                  }}>↩ Reset ({devEditCount})</button>
+                )}
+              </div>
+              {devDirty && (
+                <button onClick={devSyncToServer} disabled={devSyncing} style={{
+                  width:"100%",marginTop:6,padding:"8px",borderRadius:6,border:"none",
+                  cursor:devSyncing?"wait":"pointer",
+                  background:devSyncing?"#334155":"linear-gradient(135deg,#16a34a,#15803d)",color:"#fff",fontWeight:700,fontSize:12,
+                }}>{devSyncing ? "⏳ Syncing..." : "☁️ Sync Now (auto-saves in 3s)"}</button>
+              )}
+              {!devDirty && devEditCount > 0 && (
+                <div style={{marginTop:6,fontSize:10,color:"#4ade80",textAlign:"center"}}>✓ All dev edits synced</div>
+              )}
+              {selected && selB && (
+                <div style={{marginTop:6,fontSize:10,color:"#a8a29e",lineHeight:1.4}}>
+                  Selected: <b style={{color:"#fbbf24"}}>{selB.uid}</b> at {selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{flex:1,overflow:"auto",padding:"14px 18px"}}>
+          {!selected ? (
+            <div style={{textAlign:"center",marginTop:50,color:"#475569"}}>
+              <div style={{fontSize:44,marginBottom:10}}>📍</div>
+              <div style={{fontSize:14,fontWeight:600}}>Select a building on the map</div>
+              <div style={{fontSize:12,marginTop:6}}>Click any marker to begin</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:"#f8fafc"}}>
+                    {selB.type==="verify" ? `NSI #${selB.nsiId}` : "New Building"}
+                    <span style={{marginLeft:8,fontSize:10,padding:"2px 8px",borderRadius:4,
+                      background:selB.type==="verify"?"#1e3a5f":"#3b1219",
+                      color:selB.type==="verify"?"#60a5fa":"#fca5a5"
+                    }}>{selB.type==="verify"?"VERIFY":"NEW SURVEY"}</span>
+                    {surveys[selected] && <span style={{marginLeft:6,fontSize:10,padding:"2px 8px",borderRadius:4,background:"#166534",color:"#4ade80"}}>SAVED</span>}
+                  </div>
+                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}</div>
+                </div>
+                <button onClick={()=>{setSelected(null);setForm(EMPTY_FORM);}} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:18}}>✕</button>
+              </div>
+
+              <div style={{display:"flex",gap:6,marginBottom:12}}>
+                <button onClick={navigateToBuilding} style={{flex:1,padding:"8px",borderRadius:8,border:"none",cursor:"pointer",background:"#1d4ed8",color:"#fff",fontWeight:600,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  🧭 Navigate
+                </button>
+                <button onClick={()=>{if(!selected)return;const b=buildings.find(x=>x.uid===selected);window.open(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${b.lat},${b.lng}`,"_blank");}} style={{flex:1,padding:"8px",borderRadius:8,border:"none",cursor:"pointer",background:"#0369a1",color:"#fff",fontWeight:600,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  👁 Street View
+                </button>
+              </div>
+
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <FLD label="Surveyor">
+                  <input value={form.surveyor} onChange={e=>setForm(f=>({...f,surveyor:e.target.value}))} placeholder="Your name" style={inp}/>
+                </FLD>
+                <FLD label="Address">
+                  <input value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))} placeholder="Street address" style={inp}/>
+                </FLD>
+                <div style={{display:"flex",gap:8}}>
+                  <FLD label="Stories *" s={{flex:1}}>
+                    <input type="number" min="1" max="99" value={form.numStories} onChange={e=>setForm(f=>({...f,numStories:e.target.value}))} style={inp}/>
+                  </FLD>
+                  <FLD label="1st Floor Ht (ft)" s={{flex:1}}>
+                    <input type="number" min="0" max="30" step="0.5" value={form.firstFloorHeight} onChange={e=>setForm(f=>({...f,firstFloorHeight:e.target.value}))} style={inp}/>
+                  </FLD>
+                </div>
+                <FLD label="Basement *">
+                  <div style={{display:"flex",gap:6}}>
+                    {["Yes","No"].map(v=>(
+                      <button key={v} onClick={()=>setForm(f=>({...f,basement:v}))} style={{
+                        flex:1,padding:"7px",borderRadius:7,border:`2px solid ${form.basement===v?"#3b82f6":"#334155"}`,
+                        background:form.basement===v?"#1e3a5f":"#1e293b",color:form.basement===v?"#93c5fd":"#94a3b8",
+                        cursor:"pointer",fontWeight:600,fontSize:12,
+                      }}>{v}</button>
+                    ))}
+                  </div>
+                </FLD>
+                <FLD label="Occupancy Type *">
+                  <select value={form.occType} onChange={e=>setForm(f=>({...f,occType:e.target.value}))} style={{...inp,appearance:"auto"}}>
+                    <option value="">— Select —</option>
+                    <optgroup label="Residential">
+                      {OCC_TYPES.filter(o=>o.code.startsWith("RES")).map(o=><option key={o.code} value={o.code}>{o.label}</option>)}
+                    </optgroup>
+                    <optgroup label="Commercial">
+                      {OCC_TYPES.filter(o=>o.code.startsWith("COM")).map(o=><option key={o.code} value={o.code}>{o.label}</option>)}
+                    </optgroup>
+                    <optgroup label="Industrial">
+                      {OCC_TYPES.filter(o=>o.code.startsWith("IND")).map(o=><option key={o.code} value={o.code}>{o.label}</option>)}
+                    </optgroup>
+                    <optgroup label="Other">
+                      {OCC_TYPES.filter(o=>!/^(RES|COM|IND)/.test(o.code)).map(o=><option key={o.code} value={o.code}>{o.label}</option>)}
+                    </optgroup>
+                  </select>
+                </FLD>
+                {selB.type==="verify" && (
+                  <>
+                    <div style={{display:"flex",gap:8}}>
+                      <FLD label="Foundation Type" s={{flex:1}}>
+                        <select value={form.foundationType} onChange={e=>setForm(f=>({...f,foundationType:e.target.value}))} style={{...inp,appearance:"auto"}}>
+                          <option value="">—</option>
+                          <option value="C">C — Crawlspace</option>
+                          <option value="B">B — Basement</option>
+                          <option value="S">S — Slab</option>
+                          <option value="P">P — Pier/Pile</option>
+                        </select>
+                      </FLD>
+                      <FLD label="Bldg Type" s={{flex:1}}>
+                        <select value={form.buildingType} onChange={e=>setForm(f=>({...f,buildingType:e.target.value}))} style={{...inp,appearance:"auto"}}>
+                          <option value="">—</option>
+                          <option value="W">W — Wood</option>
+                          <option value="M">M — Masonry</option>
+                          <option value="C">C — Concrete</option>
+                          <option value="S">S — Steel</option>
+                          <option value="MH">MH — Manufactured</option>
+                        </select>
+                      </FLD>
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <FLD label="Area (sqft)" s={{flex:1}}>
+                        <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={inp}/>
+                      </FLD>
+                      <FLD label="Year Built" s={{flex:1}}>
+                        <input type="number" value={form.yearBuilt} onChange={e=>setForm(f=>({...f,yearBuilt:e.target.value}))} style={inp}/>
+                      </FLD>
+                    </div>
+                    <FLD label="Ground Elev (m)">
+                      <input type="number" step="0.01" value={form.groundElev} onChange={e=>setForm(f=>({...f,groundElev:e.target.value}))} style={inp}/>
+                    </FLD>
+                    <div style={{display:"flex",gap:8}}>
+                      <FLD label="Structure Value ($)" s={{flex:1}}>
+                        <input type="number" value={form.structureValue} onChange={e=>setForm(f=>({...f,structureValue:e.target.value}))} style={inp}/>
+                      </FLD>
+                      <FLD label="Content Value ($)" s={{flex:1}}>
+                        <input type="number" value={form.contentValue} onChange={e=>setForm(f=>({...f,contentValue:e.target.value}))} style={inp}/>
+                      </FLD>
+                    </div>
+                  </>
+                )}
+                <FLD label="Notes">
+                  <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Observations..." rows={2} style={{...inp,resize:"vertical"}}/>
+                </FLD>
+              </div>
+
+              <div style={{display:"flex",gap:8,marginTop:14}}>
+                <button onClick={handleSave} disabled={saving} style={{
+                  flex:1,padding:"11px",borderRadius:9,border:"none",cursor:saving?"wait":"pointer",
+                  background:"linear-gradient(135deg,#16a34a,#15803d)",color:"#fff",fontWeight:700,fontSize:13,
+                }}>{saving?"Saving...":"💾 Save"}</button>
+                {surveys[selected] && <button onClick={handleClear} style={{padding:"11px 14px",borderRadius:9,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:13}}>🗑</button>}
+              </div>
+
+              <div style={{display:"flex",gap:8,marginTop:8,paddingBottom:20}}>
+                <button onClick={()=>{const i=allUids.indexOf(selected);const p=i>0?i-1:allUids.length-1;window.__sel(allUids[p]);}} style={abtn("#334155")}>← Prev</button>
+                <button onClick={()=>{const i=allUids.indexOf(selected);const n=i<allUids.length-1?i+1:0;window.__sel(allUids[n]);}} style={abtn("#334155")}>Next →</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{flex:1,position:"relative"}}>
+        <div ref={mapRef} style={{width:"100%",height:"100%"}}/>
+        {devAction && (
+          <div style={{
+            position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",zIndex:1000,
+            padding:"8px 20px",borderRadius:8,
+            background:devAction==="add"?"rgba(22,101,52,.9)":"rgba(30,58,138,.9)",
+            color:"#fff",fontWeight:600,fontSize:13,boxShadow:"0 4px 16px rgba(0,0,0,.4)",
+            display:"flex",alignItems:"center",gap:10,
+          }}>
+            {devAction==="add" ? "➕ Click map to place new point" : "✥ Click map to move selected point"}
+            <button onClick={()=>setDevAction(null)} style={{background:"rgba(255,255,255,.2)",border:"none",color:"#fff",borderRadius:4,padding:"2px 8px",cursor:"pointer",fontWeight:700}}>Cancel</button>
+          </div>
+        )}
+        {loading && (
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(15,23,42,.8)",zIndex:1000}}>
+            <div style={{color:"#94a3b8"}}>Loading...</div>
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        .leaflet-container { background: #0f172a !important; }
+        ${devAction ? '.leaflet-container { cursor: crosshair !important; }' : ''}
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+      `}</style>
+    </div>
+  );
+}
+
+function FLD({label,children,s}) {
+  return <div style={s}><label style={{display:"block",fontSize:11,fontWeight:600,color:"#94a3b8",marginBottom:3,textTransform:"uppercase",letterSpacing:.5}}>{label}</label>{children}</div>;
+}
+
+const inp = {width:"100%",padding:"8px 10px",borderRadius:7,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"};
+
+function abtn(bg) {
+  return {flex:1,padding:"6px 0",borderRadius:6,border:"none",cursor:"pointer",background:bg,color:"#e2e8f0",fontWeight:600,fontSize:11,textAlign:"center"};
+}
+
+
+  
+
+function PasswordGate({ onUnlock }) {
+  const [pw, setPw] = React.useState("");
+  const [error, setError] = React.useState(false);
+
+  React.useEffect(() => {
+    const saved = sessionStorage.getItem("nsi-auth");
+    if (saved === "ok") onUnlock();
+  }, []);
+
+  const handleSubmit = () => {
+    if (pw === atob("TlkyMDI2VkE=")) {
+      sessionStorage.setItem("nsi-auth", "ok");
+      onUnlock();
+    } else {
+      setError(true);
+      setTimeout(() => setError(false), 2000);
+    }
+  };
+
+  return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",fontFamily:"'Segoe UI',system-ui,sans-serif",padding:20}}>
+      <div style={{maxWidth:400,width:"100%",textAlign:"center"}}>
+        <div style={{fontSize:48,marginBottom:12}}>🔒</div>
+        <h1 style={{color:"#f8fafc",fontSize:20,fontWeight:700,margin:"0 0 4px"}}>NSI Field Survey Tool</h1>
+        <p style={{color:"#64748b",fontSize:13,marginBottom:24}}>Enter password to continue</p>
+        <div style={{display:"flex",gap:8}}>
+          <input type="password" value={pw}
+            onChange={e=>{setPw(e.target.value);setError(false);}}
+            onKeyDown={e=>e.key==="Enter"&&handleSubmit()}
+            placeholder="Password" autoFocus
+            style={{flex:1,padding:"12px 16px",borderRadius:8,border:error?"2px solid #dc2626":"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:15,outline:"none",boxSizing:"border-box"}}
+          />
+          <button onClick={handleSubmit} style={{padding:"12px 24px",borderRadius:8,border:"none",cursor:"pointer",background:"#3b82f6",color:"#fff",fontWeight:700,fontSize:14}}>Go</button>
+        </div>
+        {error && <div style={{marginTop:10,color:"#f87171",fontSize:13,fontWeight:600}}>Incorrect password</div>}
+      </div>
+    </div>
+  );
+}
+
+function Root() {
+  const [authed, setAuthed] = React.useState(false);
+  if (!authed) return <PasswordGate onUnlock={() => setAuthed(true)} />;
+  return <App />;
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<Root />);
+
+  </script>
+</body>
+</html>
