@@ -89,7 +89,10 @@ const EMPTY_FORM = {
 
 // Google Sheets backend
 // ⚠️ PASTE YOUR DEPLOYED GOOGLE APPS SCRIPT WEB APP URL BELOW:
-const API_URL = https://script.google.com/macros/s/AKfycbxIiaRjGRV1_c-f1z1LgGPUHY_XFhdbUMv4bpC01Y5go9DtYm2G2AaROnlmzJuU9X1W/exec;
+const API_URL = "https://script.google.com/macros/s/AKfycbxIiaRjGRV1_c-f1z1LgGPUHY_XFhdbUMv4bpC01Y5go9DtYm2G2AaROnlmzJuU9X1W/exec";
+
+// ⚠️ PASTE YOUR GOOGLE SHEET URL BELOW:
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/13FjIR3W-2ENqPdkIVVJjkFNTIIoZ_Pafx9516SBpNNQ/edit?usp=sharing";
 
 // ─── Robust fetch helper: throws on non-OK responses ───
 async function postJson(payload) {
@@ -684,6 +687,7 @@ function App() {
           <div style={{display:"flex",gap:5,marginTop:8}}>
             <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest Unsurveyed</button>
             <button onClick={exportCSV} style={abtn("#7c3aed")}>📥 Export CSV</button>
+            <button onClick={()=>window.open(SHEET_URL,"_blank")} style={abtn("#0369a1")}>📊 Raw Data</button>
           </div>
 
           {/* Developer Mode Panel */}
