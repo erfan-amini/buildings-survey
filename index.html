@@ -455,14 +455,18 @@ function App() {
     });
   }, [buildings]);
 
+  const selRingRef = useRef(null);
+
   // Update markers style
   useEffect(() => {
+    // Remove old selection ring
+    if (selRingRef.current) { selRingRef.current.remove(); selRingRef.current = null; }
+
     buildings.forEach(b => {
       const m = markersRef.current[b.uid];
       if (!m) return;
       const done = !!(surveys[b.uid] && surveys[b.uid].savedAt);
       const isV = b.type === "verify";
-      const isSel = devMode && b.uid === selected;
       let show = true;
       if (filter === "survey") show = !isV;
       else if (filter === "verify") show = isV;
@@ -471,13 +475,28 @@ function App() {
 
       m.setStyle({
         fillColor: done ? "#22c55e" : isV ? "#3b82f6" : "#ef4444",
-        color: isSel ? "#fbbf24" : "#fff",
-        weight: isSel ? 3 : 1.5,
+        color: "#fff",
+        weight: 1.5,
         opacity: show ? 1 : 0.08,
         fillOpacity: show ? 0.85 : 0.05,
-        radius: isSel ? mrkRsel : (show ? (isV ? mrkRv : mrkR) : 3),
+        radius: show ? (isV ? mrkRv : mrkR) : 3,
       });
     });
+
+    // Draw selection ring around selected point
+    if (selected && mapInst.current && window.L) {
+      const b = buildings.find(x => x.uid === selected);
+      if (b) {
+        selRingRef.current = window.L.circleMarker([b.lat, b.lng], {
+          radius: isMobile ? 20 : 16,
+          fillColor: "transparent",
+          fillOpacity: 0,
+          color: "#fbbf24",
+          weight: 3,
+          opacity: 0.9,
+        }).addTo(mapInst.current);
+      }
+    }
   }, [surveys, filter, buildings, selected, devMode]);
 
   useEffect(() => {
@@ -490,7 +509,7 @@ function App() {
       if (existing) setForm({...EMPTY_FORM, ...existing});
       else if (b.prefill) setForm({...EMPTY_FORM, ...b.prefill});
       else setForm(EMPTY_FORM);
-      if (mapInst.current) mapInst.current.setView([b.lat, b.lng], 17, {animate: true});
+      if (mapInst.current) mapInst.current.panTo([b.lat, b.lng], {animate: true});
     };
     return () => { delete window.__sel; };
   }, [surveys, buildings]);
