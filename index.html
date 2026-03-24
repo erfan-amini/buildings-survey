@@ -24,8 +24,8 @@ const NSI_RAW = [{"id":46007,"lng":-72.4234887,"lat":40.87868823,"occType":"RES1
 const NEW_RAW = [{"lng":-72.42393029,"lat":40.883936},{"lng":-72.4258748,"lat":40.8841812},{"lng":-72.4303248,"lat":40.8833636},{"lng":-72.43215414,"lat":40.87054414},{"lng":-72.4289508,"lat":40.8741036},{"lng":-72.4338746,"lat":40.8827822},{"lng":-72.4351748,"lat":40.8853092},{"lng":-72.4304518,"lat":40.8703198},{"lng":-72.43357385,"lat":40.88515008},{"lng":-72.435492,"lat":40.876129},{"lng":-72.42540886,"lat":40.86936143},{"lng":-72.4347764,"lat":40.8791658},{"lng":-72.4286212,"lat":40.8745864},{"lng":-72.4295582,"lat":40.8831982},{"lng":-72.4365582,"lat":40.872245},{"lng":-72.4274372,"lat":40.871887},{"lng":-72.4275836,"lat":40.8709534},{"lng":-72.42792015,"lat":40.88470346},{"lng":-72.427331,"lat":40.8839052},{"lng":-72.430299,"lat":40.8849076},{"lng":-72.4345766,"lat":40.8818348},{"lng":-72.4312374,"lat":40.8714138},{"lng":-72.4269828,"lat":40.8691134},{"lng":-72.43118473,"lat":40.88278891},{"lng":-72.4321452,"lat":40.8823194},{"lng":-72.4323054,"lat":40.8734354},{"lng":-72.4348832,"lat":40.876941},{"lng":-72.4264914,"lat":40.8838974},{"lng":-72.4316422,"lat":40.881605},{"lng":-72.4333306,"lat":40.8810746},{"lng":-72.4328396,"lat":40.8852238},{"lng":-72.4286472,"lat":40.870177},{"lng":-72.42876743,"lat":40.88443086},{"lng":-72.4286174,"lat":40.8734542},{"lng":-72.4234534,"lat":40.8797742},{"lng":-72.43189629,"lat":40.88344343},{"lng":-72.4323076,"lat":40.8733472},{"lng":-72.43225171,"lat":40.884223},{"lng":-72.431164,"lat":40.8846384},{"lng":-72.42374156,"lat":40.87053644},{"lng":-72.4260208,"lat":40.8839232},{"lng":-72.4302722,"lat":40.8843234},{"lng":-72.4275354,"lat":40.8840186},{"lng":-72.4274772,"lat":40.8734448},{"lng":-72.4276516,"lat":40.878059},{"lng":-72.434324,"lat":40.8769642},{"lng":-72.4330576,"lat":40.8780338},{"lng":-72.4332742,"lat":40.8821618},{"lng":-72.433654,"lat":40.8817594},{"lng":-72.4259822,"lat":40.8833964},{"lng":-72.4253572,"lat":40.8837532},{"lng":-72.4325132,"lat":40.8824},{"lng":-72.4358696,"lat":40.8805932},{"lng":-72.4249694,"lat":40.8841366},{"lng":-72.4277342,"lat":40.884147},{"lng":-72.4310184,"lat":40.8713336},{"lng":-72.4342092,"lat":40.8827256},{"lng":-72.4263896,"lat":40.884344},{"lng":-72.4276652,"lat":40.8843028},{"lng":-72.4280618,"lat":40.8780414},{"lng":-72.42707089,"lat":40.88338278},{"lng":-72.42735214,"lat":40.87700786},{"lng":-72.429575,"lat":40.8842948},{"lng":-72.43301714,"lat":40.88379529},{"lng":-72.43364629,"lat":40.88426557},{"lng":-72.4354464,"lat":40.8744302},{"lng":-72.4383392,"lat":40.8749272},{"lng":-72.43104522,"lat":40.88427911},{"lng":-72.4339266,"lat":40.8833806},{"lng":-72.43446029,"lat":40.88221414},{"lng":-72.4286944,"lat":40.8792314},{"lng":-72.4311652,"lat":40.870813},{"lng":-72.431205,"lat":40.8785662},{"lng":-72.427035,"lat":40.8844668},{"lng":-72.432288,"lat":40.882091},{"lng":-72.425342,"lat":40.884156},{"lng":-72.4325132,"lat":40.885214},{"lng":-72.4264016,"lat":40.8845124},{"lng":-72.4311766,"lat":40.8714908},{"lng":-72.4373466,"lat":40.8754468}];
 
 const ALL_BUILDINGS = [
-  ...NSI_RAW.map((b, i) => ({
-    uid: "nsi-" + i, type: "verify", nsiId: b.id,
+  ...NSI_RAW.map((b) => ({
+    uid: "nsi-" + b.id, type: "verify", nsiId: b.id,
     lng: b.lng, lat: b.lat,
     prefill: {
       occType: b.occType || "", numStories: String(b.stories || ""),
@@ -88,12 +88,32 @@ const EMPTY_FORM = {
 };
 
 // Google Sheets backend
-const API_URL = "https://script.google.com/a/macros/columbia.edu/s/AKfycbz1JngLW7islFebAYy3SJbHQASSYXe75zp2rQVMamA11SSPJIgfYlfyh7xXKpggm1PphQ/exec";
+// ⚠️ PASTE YOUR DEPLOYED GOOGLE APPS SCRIPT WEB APP URL BELOW:
+const API_URL = https://script.google.com/macros/s/AKfycbxIiaRjGRV1_c-f1z1LgGPUHY_XFhdbUMv4bpC01Y5go9DtYm2G2AaROnlmzJuU9X1W/exec;
+
+// ─── Robust fetch helper: throws on non-OK responses ───
+async function postJson(payload) {
+  const r = await fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    throw new Error(`HTTP ${r.status}: ${text.slice(0, 200)}`);
+  }
+  const ct = r.headers.get("content-type") || "";
+  return ct.includes("application/json") ? r.json() : r.text();
+}
 
 async function fetchSurveys() {
   try {
     const r = await fetch(API_URL);
+    if (!r.ok) {
+      const text = await r.text().catch(() => "");
+      throw new Error(`HTTP ${r.status}: ${text.slice(0, 200)}`);
+    }
     const raw = await r.json();
+    if (raw.error) throw new Error(raw.error);
     // Map Google Sheet column names to form field names
     const mapped = {};
     for (const uid in raw) {
@@ -116,58 +136,62 @@ async function fetchSurveys() {
         savedAt: s.savedAt || "",
       };
     }
-    return mapped;
-  } catch(e) { console.error("Fetch surveys failed:", e); return {}; }
+    return { data: mapped, error: null };
+  } catch(e) {
+    console.error("Fetch surveys failed:", e);
+    return { data: {}, error: e.message };
+  }
 }
 
 async function saveSurveyEntry(uid, surveyType, nsiId, lng, lat, formData) {
-  try {
-    await fetch(API_URL, {
-      method: "POST", body: JSON.stringify({
-        action: "save",
-        data: {
-          uid,
-          survey_type: surveyType,
-          ID: nsiId || "",
-          occupancy_type: formData.occType || "",
-          building_type: formData.buildingType || "",
-          number_of_stories: formData.numStories || "",
-          area: formData.area || "",
-          foundation_type: formData.foundationType || "",
-          foundation_height: formData.firstFloorHeight || "",
-          year_built: formData.yearBuilt || "",
-          ground_elevation: formData.groundElev || "",
-          address: formData.address || "",
-          longitude: lng,
-          latitude: lat,
-          structure_value: formData.structureValue || "",
-          content_value: formData.contentValue || "",
-          basement: formData.basement || "",
-          notes: formData.notes || "",
-          surveyor: formData.surveyor || "",
-          savedAt: formData.savedAt || "",
-        }
-      })
-    });
-  } catch(e) { console.error("Save failed:", e); }
+  const resp = await postJson({
+    action: "save",
+    data: {
+      uid,
+      survey_type: surveyType,
+      ID: nsiId || "",
+      occupancy_type: formData.occType || "",
+      building_type: formData.buildingType || "",
+      number_of_stories: formData.numStories || "",
+      area: formData.area || "",
+      foundation_type: formData.foundationType || "",
+      foundation_height: formData.firstFloorHeight || "",
+      year_built: formData.yearBuilt || "",
+      ground_elevation: formData.groundElev || "",
+      address: formData.address || "",
+      longitude: lng,
+      latitude: lat,
+      structure_value: formData.structureValue || "",
+      content_value: formData.contentValue || "",
+      basement: formData.basement || "",
+      notes: formData.notes || "",
+      surveyor: formData.surveyor || "",
+      savedAt: formData.savedAt || "",
+    }
+  });
+  if (resp.error) throw new Error(resp.error);
+  return resp;
 }
 
 async function deleteSurveyEntry(uid) {
-  try {
-    await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "delete", uid }) });
-  } catch(e) { console.error("Delete failed:", e); }
+  const resp = await postJson({ action: "delete", uid });
+  if (resp.error) throw new Error(resp.error);
+  return resp;
 }
 
 async function fetchDevEdits() {
   try {
-    const r = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "getDev" }) });
-    return await r.json();
+    const resp = await postJson({ action: "getDev" });
+    if (resp.error) throw new Error(resp.error);
+    return resp;
   } catch(e) { console.error("Fetch dev edits failed:", e); return { removed: [], moved: {}, added: [] }; }
 }
 
 async function saveDevEditsRemote(d) {
   try {
-    await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "saveDev", data: d }) });
+    const resp = await postJson({ action: "saveDev", data: d });
+    if (resp.error) throw new Error(resp.error);
+    return resp;
   } catch(e) { console.error("Save dev edits failed:", e); }
 }
 
@@ -284,9 +308,10 @@ function App() {
 
   const refreshSurveys = useCallback(async () => {
     if (savingRef.current) return;
-    const s = await fetchSurveys();
+    const result = await fetchSurveys();
     if (savingRef.current) return;
-    setSurveys(s || {});
+    if (result.error) { console.warn("Survey refresh failed:", result.error); return; }
+    setSurveys(result.data || {});
   }, []);
 
   useEffect(() => {
@@ -321,7 +346,17 @@ function App() {
     };
     initDev();
     // Load surveys from Google Sheets
-    fetchSurveys().then(s => { setSurveys(s || {}); setLoading(false); });
+    fetchSurveys().then(result => {
+      if (result.error) {
+        console.error("Initial survey load failed:", result.error);
+        // Show error toast after a short delay so showToast is available
+        setTimeout(() => {
+          if (typeof window.__showToast === "function") window.__showToast("⚠ Failed to load from Google Sheet: " + result.error, "error");
+        }, 500);
+      }
+      setSurveys(result.data || {});
+      setLoading(false);
+    });
     // Poll only surveys every 30s
     const interval = setInterval(refreshSurveys, 30000);
     return () => clearInterval(interval);
@@ -330,6 +365,7 @@ function App() {
   const showToast = useCallback((msg, type="success") => {
     setToast({msg,type}); setTimeout(() => setToast(null), 3000);
   }, []);
+  useEffect(() => { window.__showToast = showToast; return () => { delete window.__showToast; }; }, [showToast]);
 
   useEffect(() => {
     if (mapInst.current || !mapRef.current) return;
@@ -512,21 +548,33 @@ function App() {
     const b = buildings.find(x => x.uid === selected);
     const basement = form.foundationType === "B" ? "Yes" : "No";
     const entry = {...form, basement, savedAt: new Date().toISOString()};
-    setSurveys(prev => ({...prev, [selected]: entry}));
-    await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, entry);
-    setSaving(false); showToast("Saved & synced!");
-    savingRef.current = false;
+    try {
+      await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, entry);
+      setSurveys(prev => ({...prev, [selected]: entry}));
+      showToast("Saved & synced!");
+    } catch (err) {
+      showToast("Save failed: " + err.message, "error");
+      console.error("Save error:", err);
+    } finally {
+      setSaving(false);
+      savingRef.current = false;
+    }
   };
 
   const handleClear = async () => {
     if (selected == null) return;
     savingRef.current = true;
-    setSurveys(prev => { const u = {...prev}; delete u[selected]; return u; });
-    await deleteSurveyEntry(selected);
-    const b = buildings.find(x => x.uid === selected);
-    setForm(b?.prefill ? {...EMPTY_FORM, ...b.prefill} : EMPTY_FORM);
-    showToast("Cleared", "info");
-    savingRef.current = false;
+    try {
+      await deleteSurveyEntry(selected);
+      setSurveys(prev => { const u = {...prev}; delete u[selected]; return u; });
+      const b = buildings.find(x => x.uid === selected);
+      setForm(b?.prefill ? {...EMPTY_FORM, ...b.prefill} : EMPTY_FORM);
+      showToast("Cleared", "info");
+    } catch (err) {
+      showToast("Clear failed: " + err.message, "error");
+    } finally {
+      savingRef.current = false;
+    }
   };
 
   const navigateToBuilding = () => {
@@ -550,25 +598,31 @@ function App() {
   };
 
   const exportCSV = () => {
-    let csv = "uid,survey_type,ID,occupancy_type,building_type,number_of_stories,area,foundation_type,foundation_height,year_built,ground_elevation,address,longitude,latitude,structure_value,content_value,basement,notes,surveyor,savedAt\n";
+    if (buildings.length === 0) { showToast("No buildings to export", "error"); return; }
+    const esc = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    let csv = "uid,survey_type,ID,occupancy_type,building_type,number_of_stories,area,foundation_type,foundation_height,year_built,ground_elevation,address,longitude,latitude,structure_value,content_value,basement,notes,surveyor,savedAt\r\n";
     buildings.forEach(b => {
       const saved = surveys[b.uid];
       const pf = b.prefill || {};
       const s = saved || pf;
-      const esc = v => `"${(String(v==null?"":v)).replace(/"/g,'""')}"`;
       csv += [
-        b.uid, b.type, b.nsiId||"",
-        s.occType||"", s.buildingType||"", s.numStories||"", s.area||"",
-        s.foundationType||"", s.firstFloorHeight||"", s.yearBuilt||"", s.groundElev||"",
-        esc(s.address||""), b.lng, b.lat,
-        s.structureValue||"", s.contentValue||"", s.basement||"",
-        esc(s.notes||""), esc(s.surveyor||""), s.savedAt||""
-      ].join(",") + "\n";
+        esc(b.uid), esc(b.type), esc(b.nsiId || ""),
+        esc(s.occType || ""), esc(s.buildingType || ""), esc(s.numStories || ""), esc(s.area || ""),
+        esc(s.foundationType || ""), esc(s.firstFloorHeight || ""), esc(s.yearBuilt || ""), esc(s.groundElev || ""),
+        esc(s.address || ""), esc(b.lng), esc(b.lat),
+        esc(s.structureValue || ""), esc(s.contentValue || ""), esc(s.basement || ""),
+        esc(s.notes || ""), esc(s.surveyor || ""), esc(s.savedAt || "")
+      ].join(",") + "\r\n";
     });
-    if (buildings.length === 0) { showToast("No buildings to export", "error"); return; }
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
-    a.download = "nsi_survey_export.csv"; a.click();
+    a.href = url;
+    a.download = "nsi_survey_export.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
     showToast("CSV exported — " + buildings.length + " buildings");
   };
 
