@@ -93,7 +93,30 @@ const API_URL = "https://script.google.com/a/macros/columbia.edu/s/AKfycbz1JngLW
 async function fetchSurveys() {
   try {
     const r = await fetch(API_URL);
-    return await r.json();
+    const raw = await r.json();
+    // Map Google Sheet column names to form field names
+    const mapped = {};
+    for (const uid in raw) {
+      const s = raw[uid];
+      mapped[uid] = {
+        occType: s.occupancy_type || s.occType || "",
+        buildingType: s.building_type || s.buildingType || "",
+        numStories: String(s.number_of_stories || s.numStories || ""),
+        area: String(s.area || ""),
+        foundationType: s.foundation_type || s.foundationType || "",
+        firstFloorHeight: String(s.foundation_height || s.firstFloorHeight || ""),
+        yearBuilt: String(s.year_built || s.yearBuilt || ""),
+        groundElev: String(s.ground_elevation || s.groundElev || ""),
+        address: s.address || "",
+        structureValue: String(s.structure_value || s.structureValue || ""),
+        contentValue: String(s.content_value || s.contentValue || ""),
+        basement: s.basement || "",
+        notes: s.notes || "",
+        surveyor: s.surveyor || "",
+        savedAt: s.savedAt || "",
+      };
+    }
+    return mapped;
   } catch(e) { console.error("Fetch surveys failed:", e); return {}; }
 }
 
@@ -163,6 +186,11 @@ function App() {
   const mapInst = useRef(null);
   const markersRef = useRef({});
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const mrkR = isMobile ? 10 : 7;
+  const mrkRv = isMobile ? 9 : 6;
+  const mrkRsel = isMobile ? 14 : 10;
+
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [surveys, setSurveys] = useState({});
@@ -192,10 +220,21 @@ function App() {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(async () => {
       savingRef.current = true;
-      await saveDevEditsRemote(devEditsRef.current);
-      // Also clean up removed survey rows
-      for (const uid of (devEditsRef.current.removed||[])) {
+      const cur = devEditsRef.current;
+      const curBuildings = applyDevEdits(ALL_BUILDINGS, cur);
+      await saveDevEditsRemote(cur);
+      // Delete removed survey rows
+      for (const uid of (cur.removed||[])) {
         await deleteSurveyEntry(uid);
+      }
+      // Update moved points' coordinates
+      for (const uid in (cur.moved||{})) {
+        const b = curBuildings.find(x => x.uid === uid);
+        if (!b) continue;
+        const s = surveysRef.current[uid] || (b.prefill ? {...b.prefill} : null);
+        if (s) {
+          await saveSurveyEntry(uid, b.type, b.nsiId, b.lng, b.lat, {...s, savedAt: s.savedAt || new Date().toISOString()});
+        }
       }
       setDevDirty(false);
       savingRef.current = false;
@@ -231,6 +270,8 @@ function App() {
     return () => window.removeEventListener("storage", handler);
   }, []);
   const savingRef = useRef(false);
+  const surveysRef = useRef(surveys);
+  useEffect(() => { surveysRef.current = surveys; }, [surveys]);
 
   // Dev edits: localStorage is primary (instant), Google Sheets is backup
   function loadLocalDev() {
@@ -329,7 +370,7 @@ function App() {
     buildings.forEach(b => {
       const isV = b.type === "verify";
       const m = L.circleMarker([b.lat, b.lng], {
-        radius: isV ? 6 : 7,
+        radius: isV ? mrkRv : mrkR,
         fillColor: isV ? "#3b82f6" : "#ef4444",
         color: "#fff", weight: 1.5, fillOpacity: 0.85,
       }).addTo(mapInst.current);
@@ -358,7 +399,7 @@ function App() {
         weight: isSel ? 3 : 1.5,
         opacity: show ? 1 : 0.08,
         fillOpacity: show ? 0.85 : 0.05,
-        radius: isSel ? 10 : (show ? (isV ? 6 : 7) : 3),
+        radius: isSel ? mrkRsel : (show ? (isV ? mrkRv : mrkR) : 3),
       });
     });
   }, [surveys, filter, buildings, selected, devMode]);
@@ -441,9 +482,20 @@ function App() {
     savingRef.current = true;
     setDevSyncing(true);
     const cur = devEditsRef.current;
+    const curBuildings = applyDevEdits(ALL_BUILDINGS, cur);
     await saveDevEditsRemote(cur);
+    // Delete removed points from Surveys tab
     for (const uid of (cur.removed||[])) {
       await deleteSurveyEntry(uid);
+    }
+    // Update moved points' coordinates in Surveys tab
+    for (const uid in (cur.moved||{})) {
+      const b = curBuildings.find(x => x.uid === uid);
+      if (!b) continue;
+      const s = surveysRef.current[uid] || (b.prefill ? {...b.prefill} : null);
+      if (s) {
+        await saveSurveyEntry(uid, b.type, b.nsiId, b.lng, b.lat, {...s, savedAt: s.savedAt || new Date().toISOString()});
+      }
     }
     setDevDirty(false);
     setDevSyncing(false);
@@ -452,13 +504,14 @@ function App() {
   };
 
   const handleSave = async () => {
-    if (!form.numStories || !form.occType) {
-      showToast("Stories and occupancy type required", "error"); return;
+    if (!form.numStories || !form.occType || !form.foundationType) {
+      showToast("Stories, foundation type, and occupancy type required", "error"); return;
     }
     savingRef.current = true;
     setSaving(true);
     const b = buildings.find(x => x.uid === selected);
-    const entry = {...form, savedAt: new Date().toISOString()};
+    const basement = form.foundationType === "B" ? "Yes" : "No";
+    const entry = {...form, basement, savedAt: new Date().toISOString()};
     setSurveys(prev => ({...prev, [selected]: entry}));
     await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, entry);
     setSaving(false); showToast("Saved & synced!");
@@ -499,15 +552,24 @@ function App() {
   const exportCSV = () => {
     let csv = "uid,survey_type,ID,occupancy_type,building_type,number_of_stories,area,foundation_type,foundation_height,year_built,ground_elevation,address,longitude,latitude,structure_value,content_value,basement,notes,surveyor,savedAt\n";
     buildings.forEach(b => {
-      const s = surveys[b.uid];
-      if (!s) return;
-      const esc = v => `"${(String(v)||"").replace(/"/g,'""')}"`;
-      csv += [b.uid,b.type,b.nsiId||"",s.occType,s.buildingType||"",s.numStories,s.area||"",s.foundationType||"",s.firstFloorHeight,s.yearBuilt||"",s.groundElev||"",esc(s.address),b.lng,b.lat,s.structureValue||"",s.contentValue||"",s.basement,esc(s.notes),esc(s.surveyor),s.savedAt].join(",") + "\n";
+      const saved = surveys[b.uid];
+      const pf = b.prefill || {};
+      const s = saved || pf;
+      const esc = v => `"${(String(v==null?"":v)).replace(/"/g,'""')}"`;
+      csv += [
+        b.uid, b.type, b.nsiId||"",
+        s.occType||"", s.buildingType||"", s.numStories||"", s.area||"",
+        s.foundationType||"", s.firstFloorHeight||"", s.yearBuilt||"", s.groundElev||"",
+        esc(s.address||""), b.lng, b.lat,
+        s.structureValue||"", s.contentValue||"", s.basement||"",
+        esc(s.notes||""), esc(s.surveyor||""), s.savedAt||""
+      ].join(",") + "\n";
     });
+    if (buildings.length === 0) { showToast("No buildings to export", "error"); return; }
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
     a.download = "nsi_survey_export.csv"; a.click();
-    showToast("CSV exported");
+    showToast("CSV exported — " + buildings.length + " buildings");
   };
 
   const verifyCount = buildings.filter(b => b.type==="verify").length;
@@ -670,16 +732,16 @@ function App() {
                     <input type="number" min="0" max="30" step="0.5" value={form.firstFloorHeight} onChange={e=>setForm(f=>({...f,firstFloorHeight:e.target.value}))} style={inp}/>
                   </FLD>
                 </div>
-                <FLD label="Basement *">
-                  <div style={{display:"flex",gap:6}}>
-                    {["Yes","No"].map(v=>(
-                      <button key={v} onClick={()=>setForm(f=>({...f,basement:v}))} style={{
-                        flex:1,padding:"7px",borderRadius:7,border:`2px solid ${form.basement===v?"#3b82f6":"#334155"}`,
-                        background:form.basement===v?"#1e3a5f":"#1e293b",color:form.basement===v?"#93c5fd":"#94a3b8",
-                        cursor:"pointer",fontWeight:600,fontSize:12,
-                      }}>{v}</button>
-                    ))}
-                  </div>
+                <FLD label="Foundation Type *">
+                  <select value={form.foundationType} onChange={e=>setForm(f=>({...f,foundationType:e.target.value}))} style={{...inp,appearance:"auto"}}>
+                    <option value="">— Select —</option>
+                    <option value="S">S — Slab on Grade</option>
+                    <option value="C">C — Crawlspace</option>
+                    <option value="B">B — Basement</option>
+                    <option value="P">P — Pier/Pile</option>
+                    <option value="W">W — Solid Wall</option>
+                    <option value="U">U — Unknown</option>
+                  </select>
                 </FLD>
                 <FLD label="Occupancy Type *">
                   <select value={form.occType} onChange={e=>setForm(f=>({...f,occType:e.target.value}))} style={{...inp,appearance:"auto"}}>
@@ -698,50 +760,37 @@ function App() {
                     </optgroup>
                   </select>
                 </FLD>
-                {selB.type==="verify" && (
-                  <>
-                    <div style={{display:"flex",gap:8}}>
-                      <FLD label="Foundation Type" s={{flex:1}}>
-                        <select value={form.foundationType} onChange={e=>setForm(f=>({...f,foundationType:e.target.value}))} style={{...inp,appearance:"auto"}}>
-                          <option value="">—</option>
-                          <option value="C">C — Crawlspace</option>
-                          <option value="B">B — Basement</option>
-                          <option value="S">S — Slab</option>
-                          <option value="P">P — Pier/Pile</option>
-                        </select>
-                      </FLD>
-                      <FLD label="Bldg Type" s={{flex:1}}>
-                        <select value={form.buildingType} onChange={e=>setForm(f=>({...f,buildingType:e.target.value}))} style={{...inp,appearance:"auto"}}>
-                          <option value="">—</option>
-                          <option value="W">W — Wood</option>
-                          <option value="M">M — Masonry</option>
-                          <option value="C">C — Concrete</option>
-                          <option value="S">S — Steel</option>
-                          <option value="MH">MH — Manufactured</option>
-                        </select>
-                      </FLD>
-                    </div>
-                    <div style={{display:"flex",gap:8}}>
-                      <FLD label="Area (sqft)" s={{flex:1}}>
-                        <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={inp}/>
-                      </FLD>
-                      <FLD label="Year Built" s={{flex:1}}>
-                        <input type="number" value={form.yearBuilt} onChange={e=>setForm(f=>({...f,yearBuilt:e.target.value}))} style={inp}/>
-                      </FLD>
-                    </div>
-                    <FLD label="Ground Elev (m)">
-                      <input type="number" step="0.01" value={form.groundElev} onChange={e=>setForm(f=>({...f,groundElev:e.target.value}))} style={inp}/>
-                    </FLD>
-                    <div style={{display:"flex",gap:8}}>
-                      <FLD label="Structure Value ($)" s={{flex:1}}>
-                        <input type="number" value={form.structureValue} onChange={e=>setForm(f=>({...f,structureValue:e.target.value}))} style={inp}/>
-                      </FLD>
-                      <FLD label="Content Value ($)" s={{flex:1}}>
-                        <input type="number" value={form.contentValue} onChange={e=>setForm(f=>({...f,contentValue:e.target.value}))} style={inp}/>
-                      </FLD>
-                    </div>
-                  </>
-                )}
+                <div style={{display:"flex",gap:8}}>
+                  <FLD label="Bldg Type" s={{flex:1}}>
+                    <select value={form.buildingType} onChange={e=>setForm(f=>({...f,buildingType:e.target.value}))} style={{...inp,appearance:"auto"}}>
+                      <option value="">—</option>
+                      <option value="W">W — Wood</option>
+                      <option value="M">M — Masonry</option>
+                      <option value="C">C — Concrete</option>
+                      <option value="S">S — Steel</option>
+                      <option value="H">H — Manufactured</option>
+                    </select>
+                  </FLD>
+                  <FLD label="Area (sqft)" s={{flex:1}}>
+                    <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={inp}/>
+                  </FLD>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <FLD label="Year Built" s={{flex:1}}>
+                    <input type="number" value={form.yearBuilt} onChange={e=>setForm(f=>({...f,yearBuilt:e.target.value}))} style={inp}/>
+                  </FLD>
+                  <FLD label="Ground Elev (m)" s={{flex:1}}>
+                    <input type="number" step="0.01" value={form.groundElev} onChange={e=>setForm(f=>({...f,groundElev:e.target.value}))} style={inp}/>
+                  </FLD>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <FLD label="Structure Value ($)" s={{flex:1}}>
+                    <input type="number" value={form.structureValue} onChange={e=>setForm(f=>({...f,structureValue:e.target.value}))} style={inp}/>
+                  </FLD>
+                  <FLD label="Content Value ($)" s={{flex:1}}>
+                    <input type="number" value={form.contentValue} onChange={e=>setForm(f=>({...f,contentValue:e.target.value}))} style={inp}/>
+                  </FLD>
+                </div>
                 <FLD label="Notes">
                   <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Observations..." rows={2} style={{...inp,resize:"vertical"}}/>
                 </FLD>
