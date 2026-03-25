@@ -175,6 +175,10 @@ async function fetchSurveys(location) {
         notes: s.notes || "",
         surveyor: s.surveyor || "",
         savedAt: s.savedAt || "",
+        longitude: s.longitude || "",
+        latitude: s.latitude || "",
+        survey_type: s.survey_type || "",
+        ID: s.ID || "",
       };
     }
     return { data: mapped, error: null };
@@ -863,12 +867,12 @@ function App() {
         lng: parseFloat(s.longitude) || 0,
         lat: parseFloat(s.latitude) || 0,
         prefill: {
-          occType: s.occupancy_type || "", buildingType: s.building_type || "",
-          numStories: s.number_of_stories || "", area: s.area || "",
-          foundationType: s.foundation_type || "", firstFloorHeight: s.foundation_height || "",
-          yearBuilt: s.year_built || "", groundElev: s.ground_elevation || "",
+          occType: s.occType || "", buildingType: s.buildingType || "",
+          numStories: s.numStories || "", area: s.area || "",
+          foundationType: s.foundationType || "", firstFloorHeight: s.firstFloorHeight || "",
+          yearBuilt: s.yearBuilt || "", groundElev: s.groundElev || "",
           address: s.address || "",
-          structureValue: s.structure_value || "", contentValue: s.content_value || "",
+          structureValue: s.structureValue || "", contentValue: s.contentValue || "",
           basement: s.basement || "", notes: s.notes || "", surveyor: s.surveyor || "",
         },
       }));
