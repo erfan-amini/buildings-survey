@@ -843,6 +843,38 @@ function App() {
     }
   };
 
+  const [pulling, setPulling] = useState(false);
+  const pullFromSheet = async () => {
+    if (!confirm("⚠️ This will overwrite all local data for \"" + LOCATIONS[curLocRef.current].name + "\" with what's in the Google Sheet.\n\nAny unsaved or unsynced local changes will be lost.\n\nContinue?")) return;
+    setPulling(true);
+    setSelected(null);
+    setForm(EMPTY_FORM);
+    try {
+      // Pull surveys
+      const result = await fetchSurveys(curLocRef.current);
+      if (result.error) throw new Error(result.error);
+      setSurveys(result.data || {});
+
+      // Pull dev edits
+      let remote = { removed: [], moved: {}, added: [], _ts: 0 };
+      try {
+        const r = await fetchDevEdits(curLocRef.current);
+        if (r && r.removed) remote = r;
+      } catch {}
+      devEditsRef.current = remote;
+      setDevEdits(remote);
+      setBuildings(applyDevEdits(buildAllBuildings(curLocRef.current), remote));
+      saveLocalDev(remote);
+
+      const count = Object.keys(result.data || {}).length;
+      showToast("Pulled " + count + " rows from Sheet!");
+    } catch (err) {
+      showToast("Pull failed: " + err.message, "error");
+    } finally {
+      setPulling(false);
+    }
+  };
+
   const verifyCount = buildings.filter(b => b.type==="verify").length;
   const surveyCount = buildings.filter(b => b.type==="survey").length;
   const doneCount = buildings.filter(b => surveys[b.uid] && surveys[b.uid].savedAt).length;
@@ -908,6 +940,9 @@ function App() {
             <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest</button>
             <button onClick={exportCSV} style={abtn("#7c3aed")}>📥 CSV</button>
             <button onClick={()=>window.open(SHEET_URL,"_blank")} style={abtn("#0369a1")}>📊 Raw Data</button>
+          </div>
+          <div style={{display:"flex",gap:5,marginTop:5}}>
+            <button onClick={pullFromSheet} disabled={pulling} style={abtn("#1d4ed8")}>{pulling ? "⏳..." : "⬇ Pull Sheet"}</button>
             <button onClick={syncAllToSheet} disabled={sheetSyncing} style={abtn("#b45309")}>{sheetSyncing ? "⏳..." : "☁️ Sync Sheet"}</button>
           </div>
 
