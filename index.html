@@ -188,6 +188,48 @@ async function saveDevEditsRemote(d, location) {
   return resp;
 }
 
+// ─── Microsoft Building Footprints (ArcGIS) ───
+const MSBFP_URL = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query";
+
+async function fetchBuildingFootprintArea(lng, lat) {
+  const params = new URLSearchParams({
+    geometry: `${lng},${lat}`,
+    geometryType: "esriGeometryPoint",
+    spatialRel: "esriSpatialRelIntersects",
+    returnGeometry: "true",
+    outFields: "*",
+    inSR: "4326",
+    outSR: "4326",
+    f: "json",
+  });
+  const r = await fetch(`${MSBFP_URL}?${params}`);
+  if (!r.ok) throw new Error(`ArcGIS HTTP ${r.status}`);
+  const data = await r.json();
+  if (!data.features || data.features.length === 0) return null;
+
+  // Get the first matching polygon and compute area in sqft
+  const rings = data.features[0].geometry.rings;
+  if (!rings || rings.length === 0) return null;
+
+  // Geodesic area using Shoelace formula with meter projection
+  let totalSqM = 0;
+  for (const ring of rings) {
+    const midLat = ring.reduce((s, p) => s + p[1], 0) / ring.length;
+    const degLng2m = Math.cos(midLat * Math.PI / 180) * 111320;
+    const degLat2m = 110540;
+    let area = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const j = (i + 1) % ring.length;
+      const xi = ring[i][0] * degLng2m, yi = ring[i][1] * degLat2m;
+      const xj = ring[j][0] * degLng2m, yj = ring[j][1] * degLat2m;
+      area += xi * yj - xj * yi;
+    }
+    totalSqM += Math.abs(area) / 2;
+  }
+  // Convert sq meters to sq feet
+  return Math.round(totalSqM * 10.7639);
+}
+
 function applyDevEdits(base, edits) {
   let list = base.filter(b => !edits.removed.includes(b.uid));
   list = list.map(b => {
@@ -799,6 +841,26 @@ function App() {
   };
 
   const [pulling, setPulling] = useState(false);
+  const [fetchingArea, setFetchingArea] = useState(false);
+  const autoFetchArea = async () => {
+    if (!selected) return;
+    const b = buildings.find(x => x.uid === selected);
+    if (!b) return;
+    setFetchingArea(true);
+    try {
+      const sqft = await fetchBuildingFootprintArea(b.lng, b.lat);
+      if (sqft !== null) {
+        setForm(f => ({...f, area: String(sqft)}));
+        showToast("Area fetched: " + sqft.toLocaleString() + " sqft");
+      } else {
+        showToast("No building footprint found at this location", "error");
+      }
+    } catch (err) {
+      showToast("Footprint fetch failed: " + err.message, "error");
+    } finally {
+      setFetchingArea(false);
+    }
+  };
   const pullFromSheet = async () => {
     if (!confirm("⚠️ This will overwrite all local data for \"" + LOCATIONS[curLocRef.current].name + "\" with what's in the Google Sheet.\n\nAny local points or changes not in the Sheet will be lost.\n\nContinue?")) return;
     setPulling(true);
@@ -1052,7 +1114,10 @@ function App() {
                     </select>
                   </FLD>
                   <FLD label="Area (sqft)" s={{flex:1}}>
-                    <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={inp}/>
+                    <div style={{display:"flex",gap:4}}>
+                      <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={{...inp,flex:1}}/>
+                      <button onClick={autoFetchArea} disabled={fetchingArea} title="Auto-detect from Microsoft Building Footprints" style={{padding:"6px 10px",borderRadius:7,border:"1px solid #334155",cursor:fetchingArea?"wait":"pointer",background:fetchingArea?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:11,whiteSpace:"nowrap"}}>{fetchingArea ? "⏳" : "🏠 Auto"}</button>
+                    </div>
                   </FLD>
                 </div>
                 <div style={{display:"flex",gap:8}}>
