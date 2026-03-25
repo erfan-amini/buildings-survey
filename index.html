@@ -845,29 +845,45 @@ function App() {
 
   const [pulling, setPulling] = useState(false);
   const pullFromSheet = async () => {
-    if (!confirm("⚠️ This will overwrite all local data for \"" + LOCATIONS[curLocRef.current].name + "\" with what's in the Google Sheet.\n\nAny unsaved or unsynced local changes will be lost.\n\nContinue?")) return;
+    if (!confirm("⚠️ This will overwrite all local data for \"" + LOCATIONS[curLocRef.current].name + "\" with what's in the Google Sheet.\n\nAny local points or changes not in the Sheet will be lost.\n\nContinue?")) return;
     setPulling(true);
     setSelected(null);
     setForm(EMPTY_FORM);
     try {
-      // Pull surveys
+      // Pull surveys — this is the single source of truth
       const result = await fetchSurveys(curLocRef.current);
       if (result.error) throw new Error(result.error);
-      setSurveys(result.data || {});
+      const sheetData = result.data || {};
 
-      // Pull dev edits
-      let remote = { removed: [], moved: {}, added: [], _ts: 0 };
-      try {
-        const r = await fetchDevEdits(curLocRef.current);
-        if (r && r.removed) remote = r;
-      } catch {}
-      devEditsRef.current = remote;
-      setDevEdits(remote);
-      setBuildings(applyDevEdits(buildAllBuildings(curLocRef.current), remote));
-      saveLocalDev(remote);
+      // Build buildings list entirely from sheet rows
+      const sheetBuildings = Object.entries(sheetData).map(([uid, s]) => ({
+        uid,
+        type: s.survey_type || (uid.startsWith("nsi-") ? "verify" : "survey"),
+        nsiId: s.ID || "",
+        lng: parseFloat(s.longitude) || 0,
+        lat: parseFloat(s.latitude) || 0,
+        prefill: {
+          occType: s.occupancy_type || "", buildingType: s.building_type || "",
+          numStories: s.number_of_stories || "", area: s.area || "",
+          foundationType: s.foundation_type || "", firstFloorHeight: s.foundation_height || "",
+          yearBuilt: s.year_built || "", groundElev: s.ground_elevation || "",
+          address: s.address || "",
+          structureValue: s.structure_value || "", contentValue: s.content_value || "",
+          basement: s.basement || "", notes: s.notes || "", surveyor: s.surveyor || "",
+        },
+      }));
 
-      const count = Object.keys(result.data || {}).length;
-      showToast("Pulled " + count + " rows from Sheet!");
+      // Clear dev edits — sheet is now the truth
+      const freshDevEdits = { removed: [], moved: {}, added: [], _ts: Date.now() };
+      devEditsRef.current = freshDevEdits;
+      setDevEdits(freshDevEdits);
+      saveLocalDev(freshDevEdits);
+      await saveDevEditsRemote(freshDevEdits, curLocRef.current);
+
+      setBuildings(sheetBuildings);
+      setSurveys(sheetData);
+
+      showToast("Pulled " + sheetBuildings.length + " buildings from Sheet!");
     } catch (err) {
       showToast("Pull failed: " + err.message, "error");
     } finally {
