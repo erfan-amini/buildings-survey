@@ -38,19 +38,29 @@ Footprint area can be auto-detected using the **Microsoft Building Footprints** 
 
 The footprint area represents the ground-level building outline. Gross floor area is derived internally as `footprint × number_of_stories` wherever needed (e.g., for cost estimation).
 
+### Ground Elevation
+
+Ground surface elevation (ft, NAVD88) can be auto-fetched from the **USGS 3D Elevation Program (3DEP)** via the Elevation Point Query Service (EPQS). When the surveyor clicks **📐 Auto** next to the Ground Elevation field:
+
+1. A point query is sent to the USGS EPQS v1 API with the building's WGS84 coordinates.
+2. The service returns the interpolated bare-earth elevation from the 3DEP dynamic elevation layer, which uses **1-meter resolution lidar-based DEMs** where available, falling back to 1/3 arc-second (~10m) seamless DEMs elsewhere.
+3. The result, in feet relative to NAVD88, is populated into the Ground Elevation field.
+
+The overall accuracy of the USGS elevation service has an RMSE of approximately 0.53 meters, though this varies by location and source data resolution.
+
 ### Structure and Content Value Estimation
 
 Structure replacement cost is estimated using **Ordinary Least Squares (OLS) linear regression** trained on the local building stock. When the surveyor clicks **💰 Auto** next to the value fields:
 
 **Step 1 — Reference Data Collection.** All buildings in the current study area that have both a known gross floor area and a known structure value are collected. Gross area is computed as `footprint_area × stories` for each building.
 
-**Step 2 — Model Fitting.** A simple linear regression is fit to the reference data:
+**Step 2 — Model Fitting.** If at least 5 reference buildings are available, an OLS linear regression is fit:
 
 ```
 V̂_structure = β₁ × A_gross + β₀
 ```
 
-where `A_gross` is gross floor area (sqft) and `V̂_structure` is the predicted structure replacement value (USD). The coefficients `β₁` (slope) and `β₀` (intercept) are computed via standard OLS normal equations.
+where `A_gross` is gross floor area (sqft), `V̂_structure` is the predicted structure replacement value (USD), `β₁` (slope) represents the marginal cost per additional square foot, and `β₀` (intercept) captures size-independent baseline costs. The coefficients are computed via standard OLS normal equations. A sanity check rejects implausibly low predictions and falls back to the median method.
 
 **Step 3 — Prediction.** The model is applied to the target building's gross area to produce the structure value estimate.
 
@@ -60,7 +70,9 @@ where `A_gross` is gross floor area (sqft) and `V̂_structure` is the predicted 
 V_content = V̂_structure / 2
 ```
 
-**Fallback.** If fewer than 5 reference buildings are available for a stable regression, the estimator uses the **median cost per gross square foot** across all reference buildings instead.
+**Fallback behavior:**
+- **2–4 reference buildings:** The median cost per gross square foot across the reference set is used instead of regression.
+- **Fewer than 2 reference buildings:** No estimate is produced; the surveyor must enter values manually.
 
 This approach ensures that cost estimates reflect **local construction costs and property characteristics** rather than relying on national look-up tables. The model is recalculated each time the button is pressed, so it incorporates any data collected during the current session.
 
@@ -99,7 +111,7 @@ Each building record contains 20 fields:
 | `foundation_type` | S (Slab), C (Crawlspace), B (Basement), P (Pier/Pile), W (Solid Wall) |
 | `foundation_height` | First floor height above grade (ft) |
 | `year_built` | Construction year |
-| `ground_elevation` | Ground surface elevation (m) |
+| `ground_elevation` | Ground surface elevation (ft, NAVD88) |
 | `address` | Street address |
 | `longitude` | WGS84 longitude |
 | `latitude` | WGS84 latitude |
@@ -126,7 +138,7 @@ An optional developer mode provides geometry editing capabilities:
 | **Move Point** | Relocate a selected point; updated coordinates sync to the sheet |
 | **Remove Point** | Delete a point from the map and backend |
 
-Developer edits are stored separately and can be reset locally. Synced deletions cannot be undone through reset — use **Pull Sheet** to restore from the backend.
+Developer edits are stored separately and can be cleared via the **Clear Edits** button, which resets both local and server-side edit state. Note that synced deletions (rows already removed from the sheet) cannot be restored through this action — use **Pull Sheet** to reload from the backend.
 
 ---
 
@@ -137,7 +149,7 @@ Developer edits are stored separately and can be reset locally. Synced deletions
 | Sheet → App | **⬇ Pull Sheet** | Overwrites local state from the Google Sheet. Clears all local dev edits. Use when starting a session or after manual sheet edits. |
 | App → Sheet | **☁️ Sync Sheet** | Pushes all local data to the sheet, overwriting its contents for the current location. |
 
-Background polling refreshes data every 30 seconds to reflect changes by other users.
+Background polling refreshes survey data and geometry edits every 30 seconds to reflect changes made by other users.
 
 ---
 
@@ -146,6 +158,7 @@ Background polling refreshes data every 30 seconds to reflect changes by other u
 | Source | Usage | Access |
 |---|---|---|
 | [Microsoft Building Footprints](https://github.com/Microsoft/USBuildingFootprints) | Automated footprint area detection | ArcGIS REST API (public, no auth) |
+| [USGS 3DEP Elevation](https://www.usgs.gov/3d-elevation-program) | Ground elevation (ft, NAVD88) from 1m lidar DEMs | EPQS REST API (public, no auth) |
 | [National Structure Inventory](https://www.hec.usace.army.mil/confluence/nsidocs) | Baseline building attributes | Pre-loaded into Google Sheets |
 | [OpenStreetMap](https://www.openstreetmap.org) | Base map tiles | Public tile server |
 
