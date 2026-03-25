@@ -81,6 +81,9 @@ const API_URL = "https://script.google.com/macros/s/AKfycbxIiaRjGRV1_c-f1z1LgGPU
 // ⚠️ PASTE YOUR GOOGLE SHEET URL BELOW:
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/13FjIR3W-2ENqPdkIVVJjkFNTIIoZ_Pafx9516SBpNNQ/edit?usp=sharing";
 
+// ⚠️ PASTE YOUR GITHUB REPO URL BELOW (e.g., "https://github.com/username/buildings-survey"):
+const README_URL = "YOUR_GITHUB_REPO_URL_HERE";
+
 // ─── Robust fetch helper: throws on non-OK responses ───
 async function postJson(payload) {
   const r = await fetch(API_URL, {
@@ -228,6 +231,60 @@ async function fetchBuildingFootprintArea(lng, lat) {
   }
   // Convert sq meters to sq feet
   return Math.round(totalSqM * 10.7639);
+}
+
+// ─── Cost Estimator (OLS regression on local building stock) ───
+// Uses all buildings in the current location with known gross area and
+// structure value to fit: structureValue = slope × grossArea + intercept
+// Then predicts for the target building. Content = structure / 2.
+// Minimum 5 reference points required; falls back to median $/sqft otherwise.
+
+function estimateCostRegression(footprintArea, stories, allSurveys, allBuildings) {
+  const fp = parseFloat(footprintArea) || 0;
+  const s = Math.max(1, Math.round(parseFloat(stories) || 1));
+  const grossTarget = fp * s;
+  if (grossTarget <= 0) return null;
+
+  // Collect reference data: buildings with known area, stories, and structure value
+  const refs = [];
+  allBuildings.forEach(b => {
+    const sv = allSurveys[b.uid];
+    const pf = b.prefill || {};
+    const d = sv || pf;
+    const area = parseFloat(d.area || pf.area);
+    const st = parseFloat(d.numStories || pf.numStories);
+    const val = parseFloat(d.structureValue || pf.structureValue);
+    if (isFinite(area) && area > 0 && isFinite(st) && st >= 1 && isFinite(val) && val > 0) {
+      refs.push({ gross: area * Math.round(st), val });
+    }
+  });
+
+  if (refs.length < 2) return null;
+
+  // OLS: y = slope * x + intercept
+  const n = refs.length;
+  let sx = 0, sy = 0, sxy = 0, sxx = 0;
+  for (const r of refs) { sx += r.gross; sy += r.val; sxy += r.gross * r.val; sxx += r.gross * r.gross; }
+  const denom = n * sxx - sx * sx;
+
+  let sv;
+  if (Math.abs(denom) < 1e-10 || n < 5) {
+    // Fallback: median $/sqft
+    const psfs = refs.map(r => r.val / r.gross).sort((a,b) => a - b);
+    const medPsf = psfs[Math.floor(psfs.length / 2)];
+    sv = Math.round(grossTarget * medPsf);
+  } else {
+    const slope = (n * sxy - sx * sy) / denom;
+    const intercept = (sy - slope * sx) / n;
+    sv = Math.round(slope * grossTarget + intercept);
+    // Sanity: if regression gives negative or implausibly low, use median
+    if (sv < grossTarget * 10) {
+      const psfs = refs.map(r => r.val / r.gross).sort((a,b) => a - b);
+      sv = Math.round(grossTarget * psfs[Math.floor(psfs.length / 2)]);
+    }
+  }
+
+  return { structure: sv, content: Math.round(sv / 2), refCount: n };
 }
 
 function applyDevEdits(base, edits) {
@@ -454,7 +511,14 @@ function App() {
     const result = await fetchSurveys(curLocRef.current);
     if (savingRef.current) return;
     if (result.error) { console.warn("Survey refresh failed:", result.error); return; }
-    setSurveys(result.data || {});
+    const sheetData = result.data || {};
+    setSurveys(sheetData);
+    // Rebuild buildings from sheet to pick up changes from other users
+    if (Object.keys(sheetData).length > 0) {
+      const freshBuildings = sheetDataToBuildings(sheetData);
+      baseBuildingsRef.current = freshBuildings;
+      setBuildings(applyDevEdits(freshBuildings, devEditsRef.current));
+    }
   }, []);
 
   useEffect(() => {
@@ -624,12 +688,23 @@ function App() {
     };
     window.__devAdd = (lat, lng) => {
       const cur = devEditsRef.current;
-      const uid = "added-" + Date.now();
-      const newPt = { uid, type: "survey", lng, lat, prefill: null };
+      // Find next available ID >= 10001
+      let maxNewId = 10000;
+      buildings.forEach(b => {
+        const id = parseInt(b.nsiId || (b.uid.startsWith("new-") ? b.uid.replace("new-","") : "0"));
+        if (id >= 10000 && id > maxNewId) maxNewId = id;
+      });
+      (cur.added||[]).forEach(a => {
+        const id = parseInt(a.nsiId || "0");
+        if (id >= 10000 && id > maxNewId) maxNewId = id;
+      });
+      const newId = maxNewId + 1;
+      const uid = "new-" + newId;
+      const newPt = { uid, type: "survey", nsiId: String(newId), lng, lat, prefill: null };
       const next = { ...cur, added: [...(cur.added||[]), newPt] };
       commitDevEdits(next);
       setDevAction(null);
-      showToast("Point added — auto-saving...");
+      showToast("Point #" + newId + " added — auto-saving...");
     };
     return () => { delete window.__devMove; delete window.__devAdd; };
   }, [selected, showToast, commitDevEdits]);
@@ -861,6 +936,21 @@ function App() {
       setFetchingArea(false);
     }
   };
+
+  const [estimatingCost, setEstimatingCost] = useState(false);
+  const autoEstimateCost = () => {
+    if (!form.area || !form.numStories) {
+      showToast("Need footprint area and stories first", "error"); return;
+    }
+    const result = estimateCostRegression(form.area, form.numStories, surveys, buildings);
+    if (result) {
+      setForm(f => ({...f, structureValue: String(result.structure), contentValue: String(result.content)}));
+      showToast("Estimated from " + result.refCount + " nearby buildings: $" + result.structure.toLocaleString());
+    } else {
+      showToast("Not enough reference data — need ≥2 buildings with known values", "error");
+    }
+  };
+
   const pullFromSheet = async () => {
     if (!confirm("⚠️ This will overwrite all local data for \"" + LOCATIONS[curLocRef.current].name + "\" with what's in the Google Sheet.\n\nAny local points or changes not in the Sheet will be lost.\n\nContinue?")) return;
     setPulling(true);
@@ -959,6 +1049,7 @@ function App() {
             <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest</button>
             <button onClick={exportCSV} style={abtn("#7c3aed")}>📥 CSV</button>
             <button onClick={()=>window.open(SHEET_URL,"_blank")} style={abtn("#0369a1")}>📊 Raw Data</button>
+            <button onClick={()=>window.open(README_URL,"_blank")} style={abtn("#475569")}>📖 README</button>
           </div>
           <div style={{display:"flex",gap:5,marginTop:5}}>
             <button onClick={pullFromSheet} disabled={pulling} style={abtn("#1d4ed8")}>{pulling ? "⏳..." : "⬇ Pull Sheet"}</button>
@@ -993,9 +1084,9 @@ function App() {
                   🗑 Remove Point
                 </button>
                 {devEditCount > 0 && (
-                  <button onClick={()=>{ if (confirm("Reset ALL dev edits (moves, removes, adds)?")) devResetAll(); }} style={{
+                  <button onClick={()=>{ if (confirm("Reset local dev edits (moves, adds, removes)?\n\nNote: Already-synced deletions cannot be restored. Use Pull Sheet to reload from the Sheet.")) devResetAll(); }} style={{
                     flex:1,padding:"6px",borderRadius:6,border:"1px solid #334155",cursor:"pointer",background:"#1e293b",color:"#f59e0b",fontWeight:600,fontSize:11,
-                  }}>↩ Reset ({devEditCount})</button>
+                  }}>↩ Undo Local ({devEditCount})</button>
                 )}
               </div>
               {devDirty && (
@@ -1038,7 +1129,7 @@ function App() {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <div>
                   <div style={{fontSize:14,fontWeight:700,color:"#f8fafc"}}>
-                    {selB.type==="verify" ? `NSI #${selB.nsiId}` : "New Building"}
+                    ID: {selB.nsiId || selB.uid}
                     <span style={{marginLeft:8,fontSize:10,padding:"2px 8px",borderRadius:4,
                       background:selB.type==="verify"?"#1e3a5f":"#3b1219",
                       color:selB.type==="verify"?"#60a5fa":"#fca5a5"
@@ -1113,7 +1204,7 @@ function App() {
                       <option value="H">H — Manufactured</option>
                     </select>
                   </FLD>
-                  <FLD label="Area (sqft)" s={{flex:1}}>
+                  <FLD label="Footprint (sqft)" s={{flex:1}}>
                     <div style={{display:"flex",gap:4}}>
                       <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={{...inp,flex:1}}/>
                       <button onClick={autoFetchArea} disabled={fetchingArea} title="Auto-detect from Microsoft Building Footprints" style={{padding:"6px 10px",borderRadius:7,border:"1px solid #334155",cursor:fetchingArea?"wait":"pointer",background:fetchingArea?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:11,whiteSpace:"nowrap"}}>{fetchingArea ? "⏳" : "🏠 Auto"}</button>
@@ -1128,13 +1219,14 @@ function App() {
                     <input type="number" step="0.01" value={form.groundElev} onChange={e=>setForm(f=>({...f,groundElev:e.target.value}))} style={inp}/>
                   </FLD>
                 </div>
-                <div style={{display:"flex",gap:8}}>
+                <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
                   <FLD label="Structure Value ($)" s={{flex:1}}>
                     <input type="number" value={form.structureValue} onChange={e=>setForm(f=>({...f,structureValue:e.target.value}))} style={inp}/>
                   </FLD>
                   <FLD label="Content Value ($)" s={{flex:1}}>
                     <input type="number" value={form.contentValue} onChange={e=>setForm(f=>({...f,contentValue:e.target.value}))} style={inp}/>
                   </FLD>
+                  <button onClick={autoEstimateCost} title="Auto-estimate via OLS regression on local building stock" style={{padding:"8px 10px",borderRadius:7,border:"1px solid #334155",cursor:"pointer",background:"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:11,whiteSpace:"nowrap",marginBottom:0}}>💰 Auto</button>
                 </div>
                 <FLD label="Notes">
                   <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Observations..." rows={2} style={{...inp,resize:"vertical"}}/>
