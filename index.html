@@ -1216,8 +1216,8 @@ function App() {
                 <button onClick={navigateToBuilding} style={{flex:1,padding:"8px",borderRadius:8,border:"none",cursor:"pointer",background:"#1d4ed8",color:"#fff",fontWeight:600,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                   🧭 Navigate
                 </button>
-                <button onClick={()=>{if(!selected)return;const b=buildings.find(x=>x.uid===selected);window.open(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${b.lat},${b.lng}`,"_blank");}} style={{flex:1,padding:"8px",borderRadius:8,border:"none",cursor:"pointer",background:"#0369a1",color:"#fff",fontWeight:600,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                  👁 Street View
+                <button onClick={()=>{if(!selected)return;const b=buildings.find(x=>x.uid===selected);window.open(`https://earth.google.com/web/@${b.lat},${b.lng},50a,200d,35y,0h,60t,0r`,"_blank");}} style={{flex:1,padding:"8px",borderRadius:8,border:"none",cursor:"pointer",background:"#0369a1",color:"#fff",fontWeight:600,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  🌍 3D View
                 </button>
               </div>
 
