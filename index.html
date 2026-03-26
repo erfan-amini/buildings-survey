@@ -1278,7 +1278,7 @@ function App() {
                   <FLD label="Footprint (sqft)" s={{flex:1}}>
                     <div style={{display:"flex",gap:4}}>
                       <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={{...inp,flex:1}}/>
-                      <button onClick={autoFetchArea} disabled={fetchingArea} title="Auto-detect from Microsoft Building Footprints" style={{padding:"6px 10px",borderRadius:7,border:"1px solid #334155",cursor:fetchingArea?"wait":"pointer",background:fetchingArea?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:11,whiteSpace:"nowrap"}}>{fetchingArea ? "⏳" : "🏠 Auto"}</button>
+                      <button onClick={autoFetchArea} disabled={fetchingArea} title="Auto-detect from Microsoft Building Footprints" style={{padding:"6px 10px",borderRadius:7,border:"1px solid #334155",cursor:fetchingArea?"wait":"pointer",background:fetchingArea?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:11,whiteSpace:"nowrap"}}>{fetchingArea ? "⏳" : "🏠 Microsoft"}</button>
                     </div>
                   </FLD>
                 </div>
@@ -1289,7 +1289,7 @@ function App() {
                   <FLD label="Ground Elev (ft, NAVD88)" s={{flex:1}}>
                     <div style={{display:"flex",gap:4}}>
                       <input type="number" step="0.01" value={form.groundElev} onChange={e=>setForm(f=>({...f,groundElev:e.target.value}))} style={{...inp,flex:1}}/>
-                      <button onClick={autoFetchElevation} disabled={fetchingElev} title="Auto-fetch from USGS 3DEP (1m lidar)" style={{padding:"6px 10px",borderRadius:7,border:"1px solid #334155",cursor:fetchingElev?"wait":"pointer",background:fetchingElev?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:11,whiteSpace:"nowrap"}}>{fetchingElev ? "⏳" : "📐 Auto"}</button>
+                      <button onClick={autoFetchElevation} disabled={fetchingElev} title="Auto-fetch from USGS 3DEP (1m lidar)" style={{padding:"6px 10px",borderRadius:7,border:"1px solid #334155",cursor:fetchingElev?"wait":"pointer",background:fetchingElev?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:11,whiteSpace:"nowrap"}}>{fetchingElev ? "⏳" : "📐 USGS"}</button>
                     </div>
                   </FLD>
                 </div>
