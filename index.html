@@ -268,27 +268,43 @@ async function fetchUSGSElevation(lng, lat) {
 // Then predicts for the target building. Content = structure / 2.
 // Minimum 5 reference points required; falls back to median $/sqft otherwise.
 
-function estimateCostRegression(footprintArea, stories, allSurveys, allBuildings) {
+function estimateCostRegression(footprintArea, stories, allSurveys, allBuildings, occType) {
   const fp = parseFloat(footprintArea) || 0;
   const s = Math.max(1, Math.round(parseFloat(stories) || 1));
   const grossTarget = fp * s;
   if (grossTarget <= 0) return null;
 
   // Collect reference data: buildings with known area, stories, and structure value
-  const refs = [];
-  allBuildings.forEach(b => {
-    const sv = allSurveys[b.uid];
-    const pf = b.prefill || {};
-    const d = sv || pf;
-    const area = parseFloat(d.area || pf.area);
-    const st = parseFloat(d.numStories || pf.numStories);
-    const val = parseFloat(d.structureValue || pf.structureValue);
-    if (isFinite(area) && area > 0 && isFinite(st) && st >= 1 && isFinite(val) && val > 0) {
-      refs.push({ gross: area * Math.round(st), val });
-    }
-  });
+  const collectRefs = (filter) => {
+    const refs = [];
+    allBuildings.forEach(b => {
+      const sv = allSurveys[b.uid];
+      const pf = b.prefill || {};
+      const d = sv || pf;
+      if (filter && !(d.occType || pf.occType || "").toUpperCase().startsWith(filter)) return;
+      const area = parseFloat(d.area || pf.area);
+      const st = parseFloat(d.numStories || pf.numStories);
+      const val = parseFloat(d.structureValue || pf.structureValue);
+      if (isFinite(area) && area > 0 && isFinite(st) && st >= 1 && isFinite(val) && val > 0) {
+        refs.push({ gross: area * Math.round(st), val });
+      }
+    });
+    return refs;
+  };
 
+  // Try same occupancy prefix first (e.g., "RES", "COM"), fall back to all
+  const occPrefix = (occType || "").toUpperCase().replace(/[0-9].*/,"");
+  let refs = occPrefix ? collectRefs(occPrefix) : [];
+  const usedFilter = refs.length >= 3;
+  if (refs.length < 3) refs = collectRefs(null);
   if (refs.length < 2) return null;
+
+  // Proper statistical median
+  function median(arr) {
+    const sorted = [...arr].sort((a,b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid-1] + sorted[mid]) / 2 : sorted[mid];
+  }
 
   // OLS: y = slope * x + intercept
   const n = refs.length;
@@ -298,9 +314,7 @@ function estimateCostRegression(footprintArea, stories, allSurveys, allBuildings
 
   let sv, method;
   if (Math.abs(denom) < 1e-10 || n < 5) {
-    // Fallback: median $/sqft (fewer than 5 refs or degenerate data)
-    const psfs = refs.map(r => r.val / r.gross).sort((a,b) => a - b);
-    const medPsf = psfs[Math.floor(psfs.length / 2)];
+    const medPsf = median(refs.map(r => r.val / r.gross));
     sv = Math.round(grossTarget * medPsf);
     method = "median";
   } else {
@@ -308,15 +322,14 @@ function estimateCostRegression(footprintArea, stories, allSurveys, allBuildings
     const intercept = (sy - slope * sx) / n;
     sv = Math.round(slope * grossTarget + intercept);
     method = "OLS";
-    // Sanity: if regression gives negative or implausibly low, use median
     if (sv < grossTarget * 10) {
-      const psfs = refs.map(r => r.val / r.gross).sort((a,b) => a - b);
-      sv = Math.round(grossTarget * psfs[Math.floor(psfs.length / 2)]);
+      const medPsf = median(refs.map(r => r.val / r.gross));
+      sv = Math.round(grossTarget * medPsf);
       method = "median";
     }
   }
 
-  return { structure: sv, content: Math.round(sv / 2), refCount: n, method };
+  return { structure: sv, content: Math.round(sv / 2), refCount: n, method, filtered: usedFilter, occPrefix };
 }
 
 function applyDevEdits(base, edits) {
@@ -981,6 +994,7 @@ function App() {
 
   // ─── Draw polygon to measure footprint area ───
   const [drawingMode, setDrawingMode] = useState(false);
+  const [drawPointCount, setDrawPointCount] = useState(0);
   const drawPointsRef = useRef([]);
   const drawLayersRef = useRef([]);
 
@@ -990,7 +1004,9 @@ function App() {
   };
 
   const startDrawing = () => {
+    if (devAction) { showToast("Exit dev mode action first", "error"); return; }
     drawPointsRef.current = [];
+    setDrawPointCount(0);
     clearDrawLayers();
     setDrawingMode(true);
     window.__drawMode = true;
@@ -998,6 +1014,7 @@ function App() {
 
   const cancelDrawing = () => {
     drawPointsRef.current = [];
+    setDrawPointCount(0);
     clearDrawLayers();
     setDrawingMode(false);
     window.__drawMode = false;
@@ -1029,6 +1046,7 @@ function App() {
       const pts = drawPointsRef.current;
       pts.push([lat, lng]);
       drawPointsRef.current = pts;
+      setDrawPointCount(pts.length);
       if (!mapInst.current || !window.L) return;
       const L = window.L;
       // Add vertex marker
@@ -1059,12 +1077,13 @@ function App() {
     if (!form.area || !form.numStories) {
       showToast("Need footprint area and stories first", "error"); return;
     }
-    const result = estimateCostRegression(form.area, form.numStories, surveys, buildings);
+    const result = estimateCostRegression(form.area, form.numStories, surveys, buildings, form.occType);
     if (result) {
       setForm(f => ({...f, structureValue: String(result.structure), contentValue: String(result.content)}));
+      const scope = result.filtered ? result.occPrefix + " buildings" : "all buildings";
       showToast(result.method === "OLS"
-        ? "OLS estimate from " + result.refCount + " buildings: $" + result.structure.toLocaleString()
-        : "Median $/sqft from " + result.refCount + " buildings: $" + result.structure.toLocaleString()
+        ? "OLS from " + result.refCount + " " + scope + ": $" + result.structure.toLocaleString()
+        : "Median from " + result.refCount + " " + scope + ": $" + result.structure.toLocaleString()
       );
     } else {
       showToast("Not enough reference data — need at least 2 buildings with known area and value in this location", "error");
@@ -1355,10 +1374,10 @@ function App() {
                     </select>
                   </FLD>
                   <FLD label="Footprint (sqft)" s={{flex:1}}>
-                    <div style={{display:"flex",gap:4}}>
-                      <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={{...inp,flex:1}}/>
-                      <button onClick={autoFetchArea} disabled={fetchingArea||drawingMode} title="Auto-detect from Microsoft Building Footprints" style={{padding:"6px 8px",borderRadius:7,border:"1px solid #334155",cursor:fetchingArea?"wait":"pointer",background:fetchingArea?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:10,whiteSpace:"nowrap"}}>{fetchingArea ? "⏳" : "🏠 Microsoft"}</button>
-                      <button onClick={drawingMode ? cancelDrawing : startDrawing} title="Draw polygon on map to measure area" style={{padding:"6px 8px",borderRadius:7,border:drawingMode?"2px solid #f59e0b":"1px solid #334155",cursor:"pointer",background:drawingMode?"#422006":"#1e3a5f",color:drawingMode?"#fbbf24":"#60a5fa",fontWeight:700,fontSize:10,whiteSpace:"nowrap"}}>{drawingMode ? "✕ Cancel" : "✏️ Draw"}</button>
+                    <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={inp}/>
+                    <div style={{display:"flex",gap:4,marginTop:4}}>
+                      <button onClick={autoFetchArea} disabled={fetchingArea||drawingMode} title="Auto-detect from Microsoft Building Footprints" style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #334155",cursor:fetchingArea?"wait":"pointer",background:fetchingArea?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:10}}>{fetchingArea ? "⏳" : "🏠 Microsoft"}</button>
+                      <button onClick={drawingMode ? cancelDrawing : startDrawing} disabled={!!devAction} title="Draw polygon on map to measure area" style={{flex:1,padding:"5px 0",borderRadius:6,border:drawingMode?"2px solid #f59e0b":"1px solid #334155",cursor:"pointer",background:drawingMode?"#422006":"#1e3a5f",color:drawingMode?"#fbbf24":"#60a5fa",fontWeight:700,fontSize:10}}>{drawingMode ? "✕ Cancel" : "✏️ Draw"}</button>
                     </div>
                   </FLD>
                 </div>
@@ -1426,7 +1445,7 @@ function App() {
             color:"#fff",fontWeight:600,fontSize:13,boxShadow:"0 4px 16px rgba(0,0,0,.4)",
             display:"flex",alignItems:"center",gap:10,
           }}>
-            ✏️ Click to draw polygon ({drawPointsRef.current.length} pts)
+            ✏️ Click to draw polygon ({drawPointCount} pts)
             <button onClick={finishDrawing} style={{background:"#16a34a",border:"none",color:"#fff",borderRadius:4,padding:"4px 12px",cursor:"pointer",fontWeight:700}}>Done</button>
             <button onClick={cancelDrawing} style={{background:"rgba(255,255,255,.2)",border:"none",color:"#fff",borderRadius:4,padding:"4px 8px",cursor:"pointer",fontWeight:700}}>Cancel</button>
           </div>
