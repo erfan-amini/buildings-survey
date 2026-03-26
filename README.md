@@ -38,6 +38,8 @@ Footprint area can be auto-detected using the **Microsoft Building Footprints** 
 
 The footprint area represents the ground-level building outline. Gross floor area is derived internally as `footprint × number_of_stories` wherever needed (e.g., for cost estimation).
 
+Alternatively, the surveyor can use the **✏️ Draw** button to manually draw a polygon around a building on the map. Each click places a vertex, a live polygon preview updates as points are added, and clicking **Done** computes the enclosed area using the same geodesic Shoelace method. This is useful when Microsoft coverage is incomplete or the auto-detected footprint does not match the actual structure.
+
 ### Ground Elevation
 
 Ground surface elevation (ft, NAVD88) can be auto-fetched from the **USGS 3D Elevation Program (3DEP)** via the Elevation Point Query Service (EPQS). When the surveyor clicks **📐 Auto** next to the Ground Elevation field:
@@ -52,7 +54,7 @@ The overall accuracy of the USGS elevation service has an RMSE of approximately 
 
 Structure replacement cost is estimated using **Ordinary Least Squares (OLS) linear regression** trained on the local building stock. When the surveyor clicks **💰 Auto** next to the value fields:
 
-**Step 1 — Reference Data Collection.** All buildings in the current study area that have both a known gross floor area and a known structure value are collected. Gross area is computed as `footprint_area × stories` for each building.
+**Step 1 — Reference Data Collection.** Buildings in the current study area with both a known gross floor area and structure value are collected. The estimator first filters to buildings matching the same **occupancy class prefix** (e.g., all RES, all COM). If fewer than 3 buildings match that class, the filter is relaxed to include all building types. Gross area is computed as `footprint_area × stories` for each reference building.
 
 **Step 2 — Model Fitting.** If at least 5 reference buildings are available, an OLS linear regression is fit:
 
@@ -71,7 +73,7 @@ V_content = V̂_structure / 2
 ```
 
 **Fallback behavior:**
-- **2–4 reference buildings:** The median cost per gross square foot across the reference set is used instead of regression.
+- **2–4 reference buildings:** The true statistical median cost per gross square foot (average of two middle values for even-sized samples) is used instead of regression.
 - **Fewer than 2 reference buildings:** No estimate is produced; the surveyor must enter values manually.
 
 This approach ensures that cost estimates reflect **local construction costs and property characteristics** rather than relying on national look-up tables. The model is recalculated each time the button is pressed, so it incorporates any data collected during the current session.
