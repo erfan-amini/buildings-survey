@@ -8,6 +8,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #root { height: 100%; overflow: hidden; }
@@ -895,33 +896,29 @@ function App() {
     }, () => showToast("Location denied", "error"));
   };
 
-  const exportCSV = () => {
+  const exportXLSX = () => {
     if (buildings.length === 0) { showToast("No buildings to export", "error"); return; }
-    const esc = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-    let csv = "ID,occupancy_type,building_type,number_of_stories,area,foundation_type,foundation_height,year_built,ground_elevation,address,longitude,latitude,structure_value,content_value\r\n";
-    buildings.forEach(b => {
+    const headers = ["ID","occupancy_type","building_type","number_of_stories","area","foundation_type","foundation_height","year_built","ground_elevation","address","longitude","latitude","structure_value","content_value"];
+    const num = v => { const n = parseFloat(v); return isFinite(n) ? n : ""; };
+    const rows = buildings.map(b => {
       const saved = surveys[b.uid];
       const pf = b.prefill || {};
       const s = saved || pf;
-      csv += [
-        esc(b.nsiId || ""),
-        esc(s.occType || ""), esc(s.buildingType || ""), esc(s.numStories || ""), esc(s.area || ""),
-        esc(s.foundationType || ""), esc(s.firstFloorHeight || ""), esc(s.yearBuilt || ""), esc(s.groundElev || ""),
-        esc(s.address || ""), esc(b.lng), esc(b.lat),
-        esc(s.structureValue || ""), esc(s.contentValue || "")
-      ].join(",") + "\r\n";
+      return [
+        num(b.nsiId || ""),
+        s.occType || "", s.buildingType || "",
+        num(s.numStories || ""), num(s.area || ""),
+        s.foundationType || "", num(s.firstFloorHeight || ""), num(s.yearBuilt || ""), num(s.groundElev || ""),
+        s.address || "", num(b.lng), num(b.lat),
+        num(s.structureValue || ""), num(s.contentValue || "")
+      ];
     });
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
     const locName = LOCATIONS[curLocRef.current].name.replace(/\s+/g, "_");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = locName + "_NSI.csv";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    showToast("CSV exported — " + buildings.length + " buildings");
+    XLSX.writeFile(wb, "DDD___" + locName + "___NSI.xlsx");
+    showToast("Exported " + buildings.length + " buildings");
   };
 
   const [sheetSyncing, setSheetSyncing] = useState(false);
@@ -1234,7 +1231,7 @@ function App() {
 
           <div style={{display:"flex",gap:5,marginTop:8}}>
             <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest</button>
-            <button onClick={exportCSV} style={abtn("#7c3aed")}>📥 CSV</button>
+            <button onClick={exportXLSX} style={abtn("#7c3aed")}>📥 Export</button>
             <button onClick={()=>window.open(SHEET_URL,"_blank")} style={abtn("#0369a1")}>📊 Raw Data</button>
             <button onClick={()=>window.open(README_URL,"_blank")} style={abtn("#475569")}>📖 README</button>
           </div>
