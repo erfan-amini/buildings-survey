@@ -210,31 +210,36 @@ async function fetchBuildingFootprintArea(lng, lat) {
   const data = await r.json();
   if (!data.features || data.features.length === 0) return null;
 
-  // Get the first matching polygon and compute area in sqft
-  const rings = data.features[0].geometry.rings;
-  if (!rings || rings.length === 0) return null;
-
-  // Geodesic area using Shoelace formula with meter projection
-  // First ring = outer boundary, subsequent rings = holes (subtracted)
-  let totalSqM = 0;
-  for (let ri = 0; ri < rings.length; ri++) {
-    const ring = rings[ri];
-    const midLat = ring.reduce((s, p) => s + p[1], 0) / ring.length;
-    const degLng2m = Math.cos(midLat * Math.PI / 180) * 111320;
-    const degLat2m = 110540;
-    let area = 0;
-    for (let i = 0; i < ring.length; i++) {
-      const j = (i + 1) % ring.length;
-      const xi = ring[i][0] * degLng2m, yi = ring[i][1] * degLat2m;
-      const xj = ring[j][0] * degLng2m, yj = ring[j][1] * degLat2m;
-      area += xi * yj - xj * yi;
+  // Compute area for each matching polygon, pick the smallest (most specific building)
+  function calcRingsArea(rings) {
+    let totalSqM = 0;
+    for (let ri = 0; ri < rings.length; ri++) {
+      const ring = rings[ri];
+      const midLat = ring.reduce((s, p) => s + p[1], 0) / ring.length;
+      const degLng2m = Math.cos(midLat * Math.PI / 180) * 111320;
+      const degLat2m = 110540;
+      let area = 0;
+      for (let i = 0; i < ring.length; i++) {
+        const j = (i + 1) % ring.length;
+        const xi = ring[i][0] * degLng2m, yi = ring[i][1] * degLat2m;
+        const xj = ring[j][0] * degLng2m, yj = ring[j][1] * degLat2m;
+        area += xi * yj - xj * yi;
+      }
+      const signedArea = area / 2;
+      totalSqM += (ri === 0) ? Math.abs(signedArea) : -Math.abs(signedArea);
     }
-    const signedArea = area / 2;
-    // First ring is outer boundary; inner rings are holes
-    totalSqM += (ri === 0) ? Math.abs(signedArea) : -Math.abs(signedArea);
+    return Math.max(0, totalSqM);
   }
-  // Convert sq meters to sq feet
-  return Math.round(totalSqM * 10.7639);
+
+  let bestSqM = Infinity;
+  for (const feat of data.features) {
+    const rings = feat.geometry && feat.geometry.rings;
+    if (!rings || rings.length === 0) continue;
+    const sqm = calcRingsArea(rings);
+    if (sqm > 0 && sqm < bestSqM) bestSqM = sqm;
+  }
+  if (!isFinite(bestSqM) || bestSqM <= 0) return null;
+  return Math.round(bestSqM * 10.7639);
 }
 
 // ─── USGS 3DEP Elevation Point Query (NAVD88, 1m lidar where available) ───
@@ -416,8 +421,15 @@ function App() {
       saveLocalDev(best);
     } catch {
       baseBuildingsRef.current = [];
-      setBuildings([]);
       setSurveys({});
+      // Still try to load dev edits (may have added points)
+      try {
+        const best = await loadDevEdits(newLoc);
+        devEditsRef.current = best;
+        setDevEdits(best);
+        setBuildings(applyDevEdits([], best));
+        saveLocalDev(best);
+      } catch { setBuildings([]); }
     }
 
     // Move map
@@ -516,11 +528,7 @@ function App() {
   const surveysRef = useRef(surveys);
   useEffect(() => { surveysRef.current = surveys; }, [surveys]);
 
-  // Dev edits: localStorage is primary (instant), Google Sheets is backup
-  function loadLocalDev() {
-    try { const r = localStorage.getItem("nsi-dev-edits-" + curLocRef.current); return r ? JSON.parse(r) : null; }
-    catch { return null; }
-  }
+  // Dev edits: localStorage helper
   function saveLocalDev(d) {
     try { localStorage.setItem("nsi-dev-edits-" + curLocRef.current, JSON.stringify(d)); } catch(e) {}
   }
@@ -532,24 +540,22 @@ function App() {
     if (result.error) { console.warn("Survey refresh failed:", result.error); return; }
     const sheetData = result.data || {};
     setSurveys(sheetData);
-    // Rebuild buildings from sheet to pick up changes from other users
-    if (Object.keys(sheetData).length > 0) {
-      const freshBuildings = sheetDataToBuildings(sheetData);
-      baseBuildingsRef.current = freshBuildings;
-      // Also refresh remote dev edits (adopt if newer)
-      try {
-        const remote = await fetchDevEdits(curLocRef.current);
-        if (remote && (remote._ts || 0) > (devEditsRef.current._ts || 0)) {
-          if (!remote.removed) remote.removed = [];
-          if (!remote.moved) remote.moved = {};
-          if (!remote.added) remote.added = [];
-          devEditsRef.current = remote;
-          setDevEdits(remote);
-          saveLocalDev(remote);
-        }
-      } catch {}
-      setBuildings(applyDevEdits(freshBuildings, devEditsRef.current));
-    }
+    // Always rebuild buildings from sheet (even if empty — clears stale data)
+    const freshBuildings = sheetDataToBuildings(sheetData);
+    baseBuildingsRef.current = freshBuildings;
+    // Always refresh remote dev edits (adopt if newer)
+    try {
+      const remote = await fetchDevEdits(curLocRef.current);
+      if (remote && (remote._ts || 0) > (devEditsRef.current._ts || 0)) {
+        if (!remote.removed) remote.removed = [];
+        if (!remote.moved) remote.moved = {};
+        if (!remote.added) remote.added = [];
+        devEditsRef.current = remote;
+        setDevEdits(remote);
+        saveLocalDev(remote);
+      }
+    } catch {}
+    setBuildings(applyDevEdits(freshBuildings, devEditsRef.current));
   }, []);
 
   useEffect(() => {
@@ -657,7 +663,7 @@ function App() {
       if (filter === "survey") show = !isV;
       else if (filter === "verify") show = isV;
       else if (filter === "done") show = done;
-      else if (filter === "pending") show = b.type==="survey" && !done;
+      else if (filter === "pending") show = !done;
 
       m.setStyle({
         fillColor: done ? "#22c55e" : isV ? "#3b82f6" : "#ef4444",
@@ -905,6 +911,9 @@ function App() {
   const [sheetSyncing, setSheetSyncing] = useState(false);
   const syncAllToSheet = async () => {
     if (buildings.length === 0) { showToast("No buildings to sync", "error"); return; }
+    const sc = buildings.filter(b => surveys[b.uid] && surveys[b.uid].savedAt).length;
+    const uc = buildings.length - sc;
+    if (!confirm("Push " + buildings.length + " buildings to Sheet:\n• " + sc + " surveyed\n• " + uc + " unsurveyed (will have partial data)\n\nContinue?")) return;
     setSheetSyncing(true);
     try {
       const rows = buildings.map(b => {
@@ -1041,9 +1050,18 @@ function App() {
   const surveyCount = buildings.filter(b => b.type==="survey").length;
   const doneCount = buildings.filter(b => surveys[b.uid] && surveys[b.uid].savedAt).length;
   const pct = buildings.length ? Math.round((doneCount / buildings.length) * 100) : 0;
-  const todoCount = buildings.filter(b => b.type==="survey" && !(surveys[b.uid] && surveys[b.uid].savedAt)).length;
+  const todoCount = buildings.filter(b => !(surveys[b.uid] && surveys[b.uid].savedAt)).length;
   const selB = selected ? buildings.find(x => x.uid === selected) : null;
-  const allUids = buildings.map(b => b.uid);
+  // Filter-aware UIDs for Prev/Next navigation
+  const filteredUids = buildings.filter(b => {
+    const done = !!(surveys[b.uid] && surveys[b.uid].savedAt);
+    const isV = b.type === "verify";
+    if (filter === "survey") return !isV;
+    if (filter === "verify") return isV;
+    if (filter === "done") return done;
+    if (filter === "pending") return !done;
+    return true;
+  }).map(b => b.uid);
   const devEditCount = devEdits.removed.length + Object.keys(devEdits.moved).length + devEdits.added.length;
 
   return (
@@ -1298,8 +1316,8 @@ function App() {
               </div>
 
               <div style={{display:"flex",gap:8,marginTop:8,paddingBottom:20}}>
-                <button onClick={()=>{const i=allUids.indexOf(selected);const p=i>0?i-1:allUids.length-1;window.__sel(allUids[p]);}} style={abtn("#334155")}>← Prev</button>
-                <button onClick={()=>{const i=allUids.indexOf(selected);const n=i<allUids.length-1?i+1:0;window.__sel(allUids[n]);}} style={abtn("#334155")}>Next →</button>
+                <button onClick={()=>{const i=filteredUids.indexOf(selected);const p=i>0?i-1:filteredUids.length-1;window.__sel(filteredUids[p]);}} style={abtn("#334155")}>← Prev</button>
+                <button onClick={()=>{const i=filteredUids.indexOf(selected);const n=i<filteredUids.length-1?i+1:0;window.__sel(filteredUids[n]);}} style={abtn("#334155")}>Next →</button>
               </div>
             </div>
           )}
