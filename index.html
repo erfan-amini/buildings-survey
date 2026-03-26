@@ -1375,11 +1375,11 @@ function App() {
                   </FLD>
                   <FLD label="Footprint (sqft)" s={{flex:1}}>
                     <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={inp}/>
-                    <div style={{display:"flex",gap:4,marginTop:4}}>
-                      <button onClick={autoFetchArea} disabled={fetchingArea||drawingMode} title="Auto-detect from Microsoft Building Footprints" style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid #334155",cursor:fetchingArea?"wait":"pointer",background:fetchingArea?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:10}}>{fetchingArea ? "⏳" : "🏠 Microsoft"}</button>
-                      <button onClick={drawingMode ? cancelDrawing : startDrawing} disabled={!!devAction} title="Draw polygon on map to measure area" style={{flex:1,padding:"5px 0",borderRadius:6,border:drawingMode?"2px solid #f59e0b":"1px solid #334155",cursor:"pointer",background:drawingMode?"#422006":"#1e3a5f",color:drawingMode?"#fbbf24":"#60a5fa",fontWeight:700,fontSize:10}}>{drawingMode ? "✕ Cancel" : "✏️ Draw"}</button>
-                    </div>
                   </FLD>
+                </div>
+                <div style={{display:"flex",gap:4}}>
+                  <button onClick={autoFetchArea} disabled={fetchingArea||drawingMode} title="Auto-detect from Microsoft Building Footprints" style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid #334155",cursor:fetchingArea?"wait":"pointer",background:fetchingArea?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:11}}>{fetchingArea ? "⏳" : "🏠 Microsoft"}</button>
+                  <button onClick={drawingMode ? cancelDrawing : startDrawing} disabled={!!devAction} title="Draw polygon on map to measure area" style={{flex:1,padding:"6px 0",borderRadius:6,border:drawingMode?"2px solid #f59e0b":"1px solid #334155",cursor:"pointer",background:drawingMode?"#422006":"#1e3a5f",color:drawingMode?"#fbbf24":"#60a5fa",fontWeight:700,fontSize:11}}>{drawingMode ? "✕ Cancel" : "✏️ Draw"}</button>
                 </div>
                 <div style={{display:"flex",gap:8}}>
                   <FLD label="Year Built" s={{flex:1}}>
