@@ -970,6 +970,19 @@ function App() {
     }
   };
 
+  const [searchId, setSearchId] = useState("");
+  const searchById = () => {
+    const q = searchId.trim();
+    if (!q) return;
+    const b = buildings.find(x => x.nsiId === q || x.uid === q || x.uid === "new-" + q || x.uid === "nsi-" + q);
+    if (b) {
+      window.__sel(b.uid);
+      setSearchId("");
+    } else {
+      showToast("No building found with ID \"" + q + "\"", "error");
+    }
+  };
+
   const [pulling, setPulling] = useState(false);
   const [fetchingArea, setFetchingArea] = useState(false);
   const autoFetchArea = async () => {
@@ -1212,6 +1225,11 @@ function App() {
                 background:filter===k?"#3b82f6":"#1e293b",color:filter===k?"#fff":"#94a3b8",
               }}>{l} ({n})</button>
             ))}
+          </div>
+
+          <div style={{display:"flex",gap:4,marginTop:8}}>
+            <input type="text" placeholder="Search by ID..." value={searchId} onChange={e=>setSearchId(e.target.value)} onKeyDown={e=>{if(e.key==="Enter") searchById();}} style={{flex:1,padding:"7px 10px",borderRadius:7,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:12}}/>
+            <button onClick={searchById} style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",background:"#334155",color:"#e2e8f0",fontWeight:700,fontSize:12}}>🔍</button>
           </div>
 
           <div style={{display:"flex",gap:5,marginTop:8}}>
