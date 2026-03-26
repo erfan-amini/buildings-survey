@@ -882,25 +882,25 @@ function App() {
   const exportCSV = () => {
     if (buildings.length === 0) { showToast("No buildings to export", "error"); return; }
     const esc = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-    let csv = "uid,survey_type,ID,occupancy_type,building_type,number_of_stories,area,foundation_type,foundation_height,year_built,ground_elevation,address,longitude,latitude,structure_value,content_value,basement,notes,surveyor,savedAt\r\n";
+    let csv = "ID,occupancy_type,building_type,number_of_stories,area,foundation_type,foundation_height,year_built,ground_elevation,address,longitude,latitude,structure_value,content_value\r\n";
     buildings.forEach(b => {
       const saved = surveys[b.uid];
       const pf = b.prefill || {};
       const s = saved || pf;
       csv += [
-        esc(b.uid), esc(b.type), esc(b.nsiId || ""),
+        esc(b.nsiId || ""),
         esc(s.occType || ""), esc(s.buildingType || ""), esc(s.numStories || ""), esc(s.area || ""),
         esc(s.foundationType || ""), esc(s.firstFloorHeight || ""), esc(s.yearBuilt || ""), esc(s.groundElev || ""),
         esc(s.address || ""), esc(b.lng), esc(b.lat),
-        esc(s.structureValue || ""), esc(s.contentValue || ""), esc(s.basement || ""),
-        esc(s.notes || ""), esc(s.surveyor || ""), esc(s.savedAt || "")
+        esc(s.structureValue || ""), esc(s.contentValue || "")
       ].join(",") + "\r\n";
     });
+    const locName = LOCATIONS[curLocRef.current].name.replace(/\s+/g, "_");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "nsi_survey_export.csv";
+    a.download = locName + "_NSI.csv";
     document.body.appendChild(a);
     a.click();
     a.remove();
