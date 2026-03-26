@@ -147,9 +147,9 @@ Developer edits are stored separately and can be cleared via the **Clear Edits**
 | Direction | Button | Behavior |
 |---|---|---|
 | Sheet → App | **⬇ Pull Sheet** | Overwrites local state from the Google Sheet. Clears all local dev edits. Use when starting a session or after manual sheet edits. |
-| App → Sheet | **☁️ Sync Sheet** | Pushes all local data to the sheet, overwriting its contents for the current location. |
+| App → Sheet | **☁️ Sync Sheet** | Pushes all local buildings to the sheet (with confirmation showing surveyed vs unsurveyed counts). |
 
-Background polling refreshes survey data and geometry edits every 30 seconds to reflect changes made by other users.
+Background polling refreshes survey data, rebuilds the building list, and adopts newer remote geometry edits every 30 seconds to reflect changes made by other users.
 
 ---
 
