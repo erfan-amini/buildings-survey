@@ -617,7 +617,9 @@ function App() {
       mapInst.current = map;
 
       map.on("click", (e) => {
-        if (window.__devAction === "move" && window.__devSelected) {
+        if (window.__drawMode && window.__drawClick) {
+          window.__drawClick(e.latlng.lat, e.latlng.lng);
+        } else if (window.__devAction === "move" && window.__devSelected) {
           window.__devMove(e.latlng.lat, e.latlng.lng);
         } else if (window.__devAction === "add") {
           window.__devAdd(e.latlng.lat, e.latlng.lng);
@@ -693,7 +695,8 @@ function App() {
 
   useEffect(() => {
     window.__sel = (uid) => {
-      if (window.__devAction) return; // don't select during dev actions
+      if (window.__devAction) return;
+      if (window.__drawMode) return; // don't select during drawing
       const b = buildings.find(x => x.uid === uid);
       if (!b) return;
       setSelected(uid);
@@ -976,6 +979,82 @@ function App() {
     }
   };
 
+  // ─── Draw polygon to measure footprint area ───
+  const [drawingMode, setDrawingMode] = useState(false);
+  const drawPointsRef = useRef([]);
+  const drawLayersRef = useRef([]);
+
+  const clearDrawLayers = () => {
+    drawLayersRef.current.forEach(l => l.remove());
+    drawLayersRef.current = [];
+  };
+
+  const startDrawing = () => {
+    drawPointsRef.current = [];
+    clearDrawLayers();
+    setDrawingMode(true);
+    window.__drawMode = true;
+  };
+
+  const cancelDrawing = () => {
+    drawPointsRef.current = [];
+    clearDrawLayers();
+    setDrawingMode(false);
+    window.__drawMode = false;
+  };
+
+  const finishDrawing = () => {
+    const pts = drawPointsRef.current;
+    if (pts.length < 3) { showToast("Need at least 3 points to form a polygon", "error"); return; }
+    // Calculate area using Shoelace with geodesic correction
+    const midLat = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+    const degLng2m = Math.cos(midLat * Math.PI / 180) * 111320;
+    const degLat2m = 110540;
+    let area = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const j = (i + 1) % pts.length;
+      const xi = pts[i][1] * degLng2m, yi = pts[i][0] * degLat2m;
+      const xj = pts[j][1] * degLng2m, yj = pts[j][0] * degLat2m;
+      area += xi * yj - xj * yi;
+    }
+    const sqM = Math.abs(area) / 2;
+    const sqft = Math.round(sqM * 10.7639);
+    setForm(f => ({...f, area: String(sqft)}));
+    showToast("Drawn area: " + sqft.toLocaleString() + " sqft");
+    cancelDrawing();
+  };
+
+  useEffect(() => {
+    window.__drawClick = (lat, lng) => {
+      const pts = drawPointsRef.current;
+      pts.push([lat, lng]);
+      drawPointsRef.current = pts;
+      if (!mapInst.current || !window.L) return;
+      const L = window.L;
+      // Add vertex marker
+      const marker = L.circleMarker([lat, lng], {
+        radius: 5, fillColor: "#f59e0b", color: "#fff", weight: 2, fillOpacity: 1,
+      }).addTo(mapInst.current);
+      drawLayersRef.current.push(marker);
+      // Update polygon preview
+      if (pts.length >= 2) {
+        // Remove old polygon preview
+        drawLayersRef.current = drawLayersRef.current.filter(l => {
+          if (l._drawPoly) { l.remove(); return false; }
+          return true;
+        });
+        const poly = L.polygon(pts, {
+          color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.15, dashArray: "6 4",
+        }).addTo(mapInst.current);
+        poly._drawPoly = true;
+        drawLayersRef.current.push(poly);
+      }
+    };
+    return () => { delete window.__drawClick; };
+  }, []);
+
+  useEffect(() => { window.__drawMode = drawingMode; }, [drawingMode]);
+
   const autoEstimateCost = () => {
     if (!form.area || !form.numStories) {
       showToast("Need footprint area and stories first", "error"); return;
@@ -1209,7 +1288,7 @@ function App() {
                   </div>
                   <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}</div>
                 </div>
-                <button onClick={()=>{setSelected(null);setForm(EMPTY_FORM);}} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:18}}>✕</button>
+                <button onClick={()=>{setSelected(null);setForm(EMPTY_FORM);cancelDrawing();}} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:18}}>✕</button>
               </div>
 
               <div style={{display:"flex",gap:6,marginBottom:12}}>
@@ -1278,7 +1357,8 @@ function App() {
                   <FLD label="Footprint (sqft)" s={{flex:1}}>
                     <div style={{display:"flex",gap:4}}>
                       <input type="number" value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} style={{...inp,flex:1}}/>
-                      <button onClick={autoFetchArea} disabled={fetchingArea} title="Auto-detect from Microsoft Building Footprints" style={{padding:"6px 10px",borderRadius:7,border:"1px solid #334155",cursor:fetchingArea?"wait":"pointer",background:fetchingArea?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:11,whiteSpace:"nowrap"}}>{fetchingArea ? "⏳" : "🏠 Microsoft"}</button>
+                      <button onClick={autoFetchArea} disabled={fetchingArea||drawingMode} title="Auto-detect from Microsoft Building Footprints" style={{padding:"6px 8px",borderRadius:7,border:"1px solid #334155",cursor:fetchingArea?"wait":"pointer",background:fetchingArea?"#334155":"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:10,whiteSpace:"nowrap"}}>{fetchingArea ? "⏳" : "🏠 Microsoft"}</button>
+                      <button onClick={drawingMode ? cancelDrawing : startDrawing} title="Draw polygon on map to measure area" style={{padding:"6px 8px",borderRadius:7,border:drawingMode?"2px solid #f59e0b":"1px solid #334155",cursor:"pointer",background:drawingMode?"#422006":"#1e3a5f",color:drawingMode?"#fbbf24":"#60a5fa",fontWeight:700,fontSize:10,whiteSpace:"nowrap"}}>{drawingMode ? "✕ Cancel" : "✏️ Draw"}</button>
                     </div>
                   </FLD>
                 </div>
@@ -1338,6 +1418,19 @@ function App() {
             <button onClick={()=>setDevAction(null)} style={{background:"rgba(255,255,255,.2)",border:"none",color:"#fff",borderRadius:4,padding:"2px 8px",cursor:"pointer",fontWeight:700}}>Cancel</button>
           </div>
         )}
+        {drawingMode && (
+          <div style={{
+            position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",zIndex:1000,
+            padding:"8px 20px",borderRadius:8,
+            background:"rgba(120,80,0,.9)",
+            color:"#fff",fontWeight:600,fontSize:13,boxShadow:"0 4px 16px rgba(0,0,0,.4)",
+            display:"flex",alignItems:"center",gap:10,
+          }}>
+            ✏️ Click to draw polygon ({drawPointsRef.current.length} pts)
+            <button onClick={finishDrawing} style={{background:"#16a34a",border:"none",color:"#fff",borderRadius:4,padding:"4px 12px",cursor:"pointer",fontWeight:700}}>Done</button>
+            <button onClick={cancelDrawing} style={{background:"rgba(255,255,255,.2)",border:"none",color:"#fff",borderRadius:4,padding:"4px 8px",cursor:"pointer",fontWeight:700}}>Cancel</button>
+          </div>
+        )}
         {loading && (
           <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(15,23,42,.8)",zIndex:1000}}>
             <div style={{color:"#94a3b8",textAlign:"center"}}>
@@ -1350,7 +1443,7 @@ function App() {
 
       <style>{`
         .leaflet-container { background: #0f172a !important; }
-        ${devAction ? '.leaflet-container { cursor: crosshair !important; }' : ''}
+        ${(devAction || drawingMode) ? '.leaflet-container { cursor: crosshair !important; }' : ''}
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
