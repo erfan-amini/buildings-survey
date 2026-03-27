@@ -625,9 +625,14 @@ function App() {
       const L = window.L;
       const map = L.map(mapRef.current, { zoomControl: false }).setView([40.877, -72.431], 14);
       L.control.zoom({ position: "topright" }).addTo(map);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OSM", maxZoom: 19,
-      }).addTo(map);
+      });
+      const aerialLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        attribution: "&copy; Esri, Maxar, Earthstar Geographics", maxZoom: 19,
+      });
+      streetLayer.addTo(map);
+      L.control.layers({ "Street": streetLayer, "Aerial": aerialLayer }, null, { position: "topright", collapsed: false }).addTo(map);
       mapInst.current = map;
 
       map.on("click", (e) => {
@@ -850,6 +855,7 @@ function App() {
 
   const handleUndoSave = async () => {
     if (selected == null) return;
+    if (!confirm("⚠️ Warning: This will clear all survey data for this building (notes, surveyor, timestamp). The point will be reset to its original pre-survey state.\n\nAre you sure you want to continue?")) return;
     savingRef.current = true;
     try {
       const b = buildings.find(x => x.uid === selected);
@@ -1426,7 +1432,7 @@ function App() {
                   flex:1,padding:"11px",borderRadius:9,border:"none",cursor:saving?"wait":"pointer",
                   background:"linear-gradient(135deg,#16a34a,#15803d)",color:"#fff",fontWeight:700,fontSize:13,
                 }}>{saving?"Saving...":"💾 Save"}</button>
-                {surveys[selected] && surveys[selected].savedAt && <button onClick={handleUndoSave} style={{padding:"11px 14px",borderRadius:9,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:13}}>↩ Undo Save</button>}
+                {surveys[selected] && surveys[selected].savedAt && <button onClick={handleUndoSave} style={{padding:"11px 14px",borderRadius:9,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:13}}>🗑 Clear</button>}
               </div>
 
               <div style={{display:"flex",gap:8,marginTop:8,paddingBottom:20}}>
@@ -1482,6 +1488,9 @@ function App() {
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
+        .leaflet-control-layers { background: rgba(15,23,42,.9) !important; border: 1px solid #334155 !important; border-radius: 8px !important; padding: 8px 12px !important; color: #e2e8f0 !important; font-size: 12px !important; font-weight: 600 !important; backdrop-filter: blur(8px); box-shadow: 0 4px 12px rgba(0,0,0,.4) !important; }
+        .leaflet-control-layers label { color: #e2e8f0 !important; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+        .leaflet-control-layers-separator { border-top: 1px solid #334155 !important; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
       `}</style>
     </div>
