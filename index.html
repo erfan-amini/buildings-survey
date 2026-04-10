@@ -72,7 +72,7 @@ const EMPTY_FORM = {
   numStories: "", firstFloorHeight: "", basement: "", address: "",
   occType: "", foundationType: "", buildingType: "", area: "",
   yearBuilt: "", groundElev: "", structureValue: "", contentValue: "",
-  notes: "", surveyor: "",
+  notes: "", surveyor: "", flagged: "",
 };
 
 // Google Sheets backend
@@ -128,6 +128,7 @@ async function fetchSurveys(location) {
         notes: s.notes || "",
         surveyor: s.surveyor || "",
         savedAt: s.savedAt || "",
+        flagged: s.flagged || "",
         longitude: s.longitude || "",
         latitude: s.latitude || "",
         survey_type: s.survey_type || "",
@@ -166,6 +167,7 @@ async function saveSurveyEntry(uid, surveyType, nsiId, lng, lat, formData, locat
       notes: formData.notes || "",
       surveyor: formData.surveyor || "",
       savedAt: formData.savedAt || "",
+      flagged: formData.flagged || "",
     }
   });
   if (resp.error) throw new Error(resp.error);
@@ -363,6 +365,7 @@ function sheetDataToBuildings(sheetData) {
           address: s.address || "",
           structureValue: s.structureValue || "", contentValue: s.contentValue || "",
           basement: s.basement || "", notes: s.notes || "", surveyor: s.surveyor || "",
+          flagged: s.flagged || "",
         },
       };
     })
@@ -402,6 +405,7 @@ function App() {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const markersRef = useRef({});
+  const flagMarkersRef = useRef({});
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   const mrkR = isMobile ? 10 : 7;
@@ -460,6 +464,8 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [advFilters, setAdvFilters] = useState({ flagged: "all", occClass: "all", foundation: "all", bldgType: "all" });
+  const [showAdvFilters, setShowAdvFilters] = useState(false);
   const [devMode, setDevMode] = useState(false);
   const [devAction, setDevAction] = useState(null); // "move" | "add" | null
   const [devEdits, setDevEdits] = useState({ removed: [], moved: {}, added: [] });
@@ -655,7 +661,9 @@ function App() {
     // Remove old markers
     Object.values(markersRef.current).forEach(m => m.remove());
     markersRef.current = {};
-    // Create fresh
+    Object.values(flagMarkersRef.current).forEach(m => m.remove());
+    flagMarkersRef.current = {};
+    // Create circle markers for all buildings
     buildings.forEach(b => {
       const isV = b.type === "verify";
       const m = L.circleMarker([b.lat, b.lng], {
@@ -670,30 +678,79 @@ function App() {
 
   const selRingRef = useRef(null);
 
+  // Helper: check if a building passes all active filters
+  const passesFilters = useCallback((b) => {
+    const sv = surveys[b.uid];
+    const pf = b.prefill || {};
+    const d = sv || pf;
+    const done = !!(sv && sv.savedAt);
+    const isV = b.type === "verify";
+    const isFlagged = d.flagged === "Yes";
+    // Status filter
+    if (filter === "survey" && isV) return false;
+    if (filter === "verify" && !isV) return false;
+    if (filter === "done" && !done) return false;
+    if (filter === "pending" && done) return false;
+    // Advanced filters
+    if (advFilters.flagged === "yes" && !isFlagged) return false;
+    if (advFilters.flagged === "no" && isFlagged) return false;
+    if (advFilters.occClass !== "all") {
+      const occ = (d.occType || "").toUpperCase();
+      if (advFilters.occClass === "RES" && !occ.startsWith("RES")) return false;
+      if (advFilters.occClass === "COM" && !occ.startsWith("COM")) return false;
+      if (advFilters.occClass === "IND" && !occ.startsWith("IND")) return false;
+      if (advFilters.occClass === "OTHER" && (occ.startsWith("RES") || occ.startsWith("COM") || occ.startsWith("IND"))) return false;
+    }
+    if (advFilters.foundation !== "all" && (d.foundationType || "").toUpperCase() !== advFilters.foundation) return false;
+    if (advFilters.bldgType !== "all" && (d.buildingType || "").toUpperCase() !== advFilters.bldgType) return false;
+    return true;
+  }, [surveys, filter, advFilters]);
+
   // Update markers style
   useEffect(() => {
     // Remove old selection ring
     if (selRingRef.current) { selRingRef.current.remove(); selRingRef.current = null; }
+    // Remove old flag markers
+    Object.values(flagMarkersRef.current).forEach(m => m.remove());
+    flagMarkersRef.current = {};
+
+    const L = window.L;
 
     buildings.forEach(b => {
-      const m = markersRef.current[b.uid];
-      if (!m) return;
-      const done = !!(surveys[b.uid] && surveys[b.uid].savedAt);
+      const cm = markersRef.current[b.uid];
+      if (!cm) return;
+      const sv = surveys[b.uid];
+      const pf = b.prefill || {};
+      const d = sv || pf;
+      const done = !!(sv && sv.savedAt);
+      const isFlagged = d.flagged === "Yes";
       const isV = b.type === "verify";
-      let show = true;
-      if (filter === "survey") show = !isV;
-      else if (filter === "verify") show = isV;
-      else if (filter === "done") show = done;
-      else if (filter === "pending") show = !done;
+      const show = passesFilters(b);
 
-      m.setStyle({
-        fillColor: done ? "#22c55e" : isV ? "#3b82f6" : "#ef4444",
-        color: "#fff",
-        weight: 1.5,
-        opacity: show ? 1 : 0.08,
-        fillOpacity: show ? 0.85 : 0.05,
-        radius: show ? (isV ? mrkRv : mrkR) : 3,
-      });
+      if (isFlagged && L && mapInst.current) {
+        // Flagged: hide circle marker, show orange flag DivIcon
+        cm.setStyle({ fillOpacity: 0, opacity: 0, radius: 0 });
+        const flagSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="28" viewBox="0 0 24 28"><line x1="4" y1="2" x2="4" y2="27" stroke="#b45309" stroke-width="2.5" stroke-linecap="round"/><path d="M5 3 L21 7 L5 13 Z" fill="#f97316" stroke="#b45309" stroke-width="1"/></svg>`;
+        const flagIcon = L.divIcon({
+          html: `<div style="opacity:${show?1:0.08};transition:opacity .2s;">${flagSvg}</div>`,
+          className: '',
+          iconSize: [24, 28],
+          iconAnchor: [4, 27],
+        });
+        const fm = L.marker([b.lat, b.lng], { icon: flagIcon, interactive: true, zIndexOffset: 400 }).addTo(mapInst.current);
+        fm.on("click", () => window.__sel(b.uid));
+        flagMarkersRef.current[b.uid] = fm;
+      } else {
+        // Non-flagged: normal circle marker
+        cm.setStyle({
+          fillColor: done ? "#22c55e" : isV ? "#3b82f6" : "#ef4444",
+          color: "#fff",
+          weight: 1.5,
+          opacity: show ? 1 : 0.08,
+          fillOpacity: show ? 0.85 : 0.05,
+          radius: show ? (isV ? mrkRv : mrkR) : 3,
+        });
+      }
     });
 
     // Draw selection ring around selected point
@@ -710,7 +767,7 @@ function App() {
         }).addTo(mapInst.current);
       }
     }
-  }, [surveys, filter, buildings, selected, devMode]);
+  }, [surveys, filter, advFilters, passesFilters, buildings, selected, devMode]);
 
   useEffect(() => {
     window.__sel = (uid) => {
@@ -839,7 +896,7 @@ function App() {
     setSaving(true);
     const b = buildings.find(x => x.uid === selected);
     const basement = form.foundationType === "B" ? "Yes" : "No";
-    const entry = {...form, basement, savedAt: new Date().toISOString()};
+    const entry = {...form, basement, savedAt: new Date().toISOString(), flagged: form.flagged || ""};
     try {
       await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, entry, curLocRef.current);
       setSurveys(prev => ({...prev, [selected]: entry}));
@@ -868,7 +925,7 @@ function App() {
         yearBuilt: pf.yearBuilt || "", groundElev: pf.groundElev || "",
         address: pf.address || "",
         structureValue: pf.structureValue || "", contentValue: pf.contentValue || "",
-        basement: pf.basement || "", notes: "", surveyor: "", savedAt: "",
+        basement: pf.basement || "", notes: "", surveyor: "", savedAt: "", flagged: "",
       };
       // Update the sheet row (keep building in sheet but clear the survey)
       await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, resetEntry, curLocRef.current);
@@ -904,7 +961,7 @@ function App() {
 
   const exportXLSX = () => {
     if (buildings.length === 0) { showToast("No buildings to export", "error"); return; }
-    const headers = ["ID","occupancy_type","building_type","number_of_stories","area","foundation_type","foundation_height","year_built","ground_elevation","address","longitude","latitude","structure_value","content_value"];
+    const headers = ["ID","occupancy_type","building_type","number_of_stories","area","foundation_type","foundation_height","year_built","ground_elevation","address","longitude","latitude","structure_value","content_value","flagged"];
     const num = v => { const n = parseFloat(v); return isFinite(n) ? n : ""; };
     const rows = buildings.map(b => {
       const saved = surveys[b.uid];
@@ -916,7 +973,8 @@ function App() {
         num(s.numStories || ""), num(s.area || ""),
         s.foundationType || "", num(s.firstFloorHeight || ""), num(s.yearBuilt || ""), num(s.groundElev || ""),
         s.address || "", num(b.lng), num(b.lat),
-        num(s.structureValue || ""), num(s.contentValue || "")
+        num(s.structureValue || ""), num(s.contentValue || ""),
+        s.flagged || ""
       ];
     });
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -960,6 +1018,7 @@ function App() {
           notes: s.notes || "",
           surveyor: s.surveyor || "",
           savedAt: s.savedAt || "",
+          flagged: s.flagged || "",
         };
       });
       const resp = await postJson({ action: "bulkSave", rows, location: curLocRef.current });
@@ -1165,17 +1224,10 @@ function App() {
   const doneCount = buildings.filter(b => surveys[b.uid] && surveys[b.uid].savedAt).length;
   const pct = buildings.length ? Math.round((doneCount / buildings.length) * 100) : 0;
   const todoCount = buildings.filter(b => !(surveys[b.uid] && surveys[b.uid].savedAt)).length;
+  const flaggedCount = buildings.filter(b => { const sv = surveys[b.uid]; const pf = b.prefill || {}; return (sv || pf).flagged === "Yes"; }).length;
   const selB = selected ? buildings.find(x => x.uid === selected) : null;
   // Filter-aware UIDs for Prev/Next navigation
-  const filteredUids = buildings.filter(b => {
-    const done = !!(surveys[b.uid] && surveys[b.uid].savedAt);
-    const isV = b.type === "verify";
-    if (filter === "survey") return !isV;
-    if (filter === "verify") return isV;
-    if (filter === "done") return done;
-    if (filter === "pending") return !done;
-    return true;
-  }).map(b => b.uid);
+  const filteredUids = buildings.filter(b => passesFilters(b)).map(b => b.uid);
   const devEditCount = devEdits.removed.length + Object.keys(devEdits.moved).length + devEdits.added.length;
 
   return (
@@ -1215,10 +1267,11 @@ function App() {
             <div style={{height:5,borderRadius:3,background:pct===100?"#22c55e":"linear-gradient(90deg,#3b82f6,#8b5cf6)",width:`${pct}%`,transition:"width .4s"}}/>
           </div>
 
-          <div style={{display:"flex",gap:12,marginTop:8,fontSize:11,color:"#94a3b8"}}>
+          <div style={{display:"flex",gap:12,marginTop:8,fontSize:11,color:"#94a3b8",flexWrap:"wrap"}}>
             <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#ef4444",marginRight:4,verticalAlign:"middle"}}/>New ({surveyCount})</span>
             <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#3b82f6",marginRight:4,verticalAlign:"middle"}}/>Verify ({verifyCount})</span>
             <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#22c55e",marginRight:4,verticalAlign:"middle"}}/>Done ({doneCount})</span>
+            {flaggedCount > 0 && <span><svg width="10" height="12" viewBox="0 0 24 28" style={{verticalAlign:"middle",marginRight:4}}><line x1="4" y1="2" x2="4" y2="27" stroke="#b45309" strokeWidth="3"/><path d="M5 3 L21 7 L5 13 Z" fill="#f97316" stroke="#b45309" strokeWidth="1"/></svg>Flagged ({flaggedCount})</span>}
           </div>
 
           <div style={{display:"flex",gap:4,marginTop:8}}>
@@ -1229,6 +1282,70 @@ function App() {
               }}>{l} ({n})</button>
             ))}
           </div>
+
+          <button onClick={()=>setShowAdvFilters(v=>!v)} style={{
+            width:"100%",marginTop:6,padding:"5px 0",borderRadius:5,border:"1px solid #334155",cursor:"pointer",
+            background:showAdvFilters||Object.values(advFilters).some(v=>v!=="all")?"#1e3a5f":"#1e293b",
+            color:Object.values(advFilters).some(v=>v!=="all")?"#f97316":"#94a3b8",fontSize:10,fontWeight:600,
+            display:"flex",alignItems:"center",justifyContent:"center",gap:4,
+          }}>
+            🔎 Advanced Filters {Object.values(advFilters).filter(v=>v!=="all").length > 0 && `(${Object.values(advFilters).filter(v=>v!=="all").length} active)`}
+            <span style={{fontSize:8}}>{showAdvFilters?"▲":"▼"}</span>
+          </button>
+          {showAdvFilters && (
+            <div style={{marginTop:4,padding:"8px 10px",borderRadius:7,background:"#1e293b",border:"1px solid #334155",display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{display:"flex",gap:6}}>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Flagged</label>
+                  <select value={advFilters.flagged} onChange={e=>setAdvFilters(f=>({...f,flagged:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                    <option value="all">All</option>
+                    <option value="yes">🚩 Flagged</option>
+                    <option value="no">Not Flagged</option>
+                  </select>
+                </div>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Occupancy</label>
+                  <select value={advFilters.occClass} onChange={e=>setAdvFilters(f=>({...f,occClass:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                    <option value="all">All</option>
+                    <option value="RES">Residential</option>
+                    <option value="COM">Commercial</option>
+                    <option value="IND">Industrial</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Foundation</label>
+                  <select value={advFilters.foundation} onChange={e=>setAdvFilters(f=>({...f,foundation:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                    <option value="all">All</option>
+                    <option value="S">S — Slab</option>
+                    <option value="C">C — Crawlspace</option>
+                    <option value="B">B — Basement</option>
+                    <option value="P">P — Pier/Pile</option>
+                    <option value="W">W — Solid Wall</option>
+                  </select>
+                </div>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Bldg Type</label>
+                  <select value={advFilters.bldgType} onChange={e=>setAdvFilters(f=>({...f,bldgType:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                    <option value="all">All</option>
+                    <option value="W">W — Wood</option>
+                    <option value="M">M — Masonry</option>
+                    <option value="C">C — Concrete</option>
+                    <option value="S">S — Steel</option>
+                    <option value="H">H — Manufactured</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:10,color:"#94a3b8"}}>{filteredUids.length} / {buildings.length} shown</span>
+                {Object.values(advFilters).some(v=>v!=="all") && (
+                  <button onClick={()=>setAdvFilters({flagged:"all",occClass:"all",foundation:"all",bldgType:"all"})} style={{padding:"3px 10px",borderRadius:4,border:"none",cursor:"pointer",background:"#334155",color:"#f97316",fontSize:10,fontWeight:600}}>Clear Filters</button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div style={{display:"flex",gap:4,marginTop:8}}>
             <input type="text" placeholder="Search by ID..." value={searchId} onChange={e=>setSearchId(e.target.value)} onKeyDown={e=>{if(e.key==="Enter") searchById();}} style={{flex:1,padding:"7px 10px",borderRadius:7,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:12}}/>
@@ -1325,6 +1442,7 @@ function App() {
                       color:selB.type==="verify"?"#60a5fa":"#fca5a5"
                     }}>{selB.type==="verify"?"VERIFY":"NEW SURVEY"}</span>
                     {surveys[selected] && surveys[selected].savedAt && <span style={{marginLeft:6,fontSize:10,padding:"2px 8px",borderRadius:4,background:"#166534",color:"#4ade80"}}>SAVED</span>}
+                    {((surveys[selected] || (selB && selB.prefill) || {}).flagged === "Yes") && <span style={{marginLeft:6,fontSize:10,padding:"2px 8px",borderRadius:4,background:"#431407",color:"#fb923c"}}>🚩 FLAGGED</span>}
                   </div>
                   <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}</div>
                 </div>
@@ -1425,6 +1543,13 @@ function App() {
                 <FLD label="Notes">
                   <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Observations..." rows={2} style={{...inp,resize:"vertical"}}/>
                 </FLD>
+                <button onClick={()=>setForm(f=>({...f,flagged:f.flagged==="Yes"?"":"Yes"}))} style={{
+                  width:"100%",padding:"9px",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:12,
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                  border:form.flagged==="Yes"?"2px solid #f97316":"1px solid #334155",
+                  background:form.flagged==="Yes"?"#431407":"#1e293b",
+                  color:form.flagged==="Yes"?"#fb923c":"#94a3b8",
+                }}>{form.flagged==="Yes"?"🚩 Flagged — Needs Site Visit":"🏳️ Flag for Site Visit Validation"}</button>
               </div>
 
               <div style={{display:"flex",gap:8,marginTop:14}}>
