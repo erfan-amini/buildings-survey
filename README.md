@@ -24,6 +24,49 @@ Each building in the inventory exists in one of three visual states:
 
 A surveyor selects a point on the map, reviews or enters the building attributes, and saves. Each save writes immediately to the backend. The **Undo Save** action resets a point to its pre-survey state without deleting the underlying row.
 
+### Site Visit Validation Flag
+
+Buildings whose data has uncertainty or needs in-person confirmation can be flagged using the **🏳️ Flag for Site Visit Validation** toggle in the survey form. When a building is flagged:
+
+- Its map marker changes from a colored circle to an **orange flag** icon, making flagged buildings immediately identifiable at a glance.
+- A **🚩 FLAGGED** badge appears in the building detail header.
+- The flag is stored as part of the building record and syncs to the Google Sheet backend.
+
+Flagging is independent of saving: a building can be flagged without data, with partial data, or with complete saved data. Flagged buildings behave identically to other buildings in all other respects — they can be saved, edited, exported, and synced. The flag purely indicates that the data has uncertainty and should be validated during a site visit.
+
+---
+
+## Advanced Filters
+
+The tool provides a two-tier filtering system for navigating large building inventories.
+
+### Status Filters
+
+The primary filter bar provides quick access to survey workflow states:
+
+| Filter | Shows |
+|---|---|
+| **All** | All buildings |
+| **New** | New survey points (red markers) |
+| **Verify** | NSI records requiring verification (blue markers) |
+| **Done** | Buildings with completed surveys (green markers) |
+| **Todo** | Buildings not yet surveyed |
+
+### Advanced Attribute Filters
+
+The **🔎 Advanced Filters** panel (collapsible) provides combinable attribute-based filters:
+
+| Filter | Options | Description |
+|---|---|---|
+| **Flagged** | All / Flagged / Not Flagged | Filter by site visit validation flag status |
+| **Occupancy** | All / Residential / Commercial / Industrial / Other | Filter by FEMA/Hazus occupancy class prefix |
+| **Foundation** | All / S / C / B / P / W | Filter by foundation type |
+| **Bldg Type** | All / W / M / C / S / H | Filter by construction material |
+
+All filters combine with **AND** logic — only buildings matching every active filter criterion are shown prominently on the map (non-matching buildings are dimmed). A live count shows how many buildings match the current filter combination. The **Clear Filters** button resets all advanced filters to "All."
+
+Advanced filters also apply to the **Prev/Next** navigation buttons, so cycling through buildings respects the active filter set.
+
 ---
 
 ## Automated Attribute Estimation
@@ -99,7 +142,7 @@ Supported API operations: **Load** (GET all rows for a location), **Save** (upse
 
 ### Data Schema
 
-Each building record contains 20 fields:
+Each building record contains 21 fields:
 
 | Field | Description |
 |---|---|
@@ -120,6 +163,7 @@ Each building record contains 20 fields:
 | `structure_value` | Structure replacement cost (USD) |
 | `content_value` | Content replacement cost (USD) |
 | `basement` | Yes / No |
+| `flagged` | Yes / (empty) — indicates data needs in-person site visit validation |
 | `notes` | Free-text field observations |
 | `surveyor` | Surveyor name |
 | `savedAt` | ISO 8601 timestamp (empty = not yet surveyed) |
