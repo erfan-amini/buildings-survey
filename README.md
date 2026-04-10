@@ -26,13 +26,13 @@ A surveyor selects a point on the map, reviews or enters the building attributes
 
 ### Site Visit Validation Flag
 
-Buildings whose data has uncertainty or needs in-person confirmation can be flagged using the **🏳️ Flag for Site Visit Validation** toggle in the survey form. When a building is flagged:
+Buildings whose data has uncertainty or needs in-person confirmation can be flagged using the **🏳️ Flag for Site Visit Validation** toggle, which appears at the top of the building detail panel (above all form fields). When a building is flagged:
 
 - Its map marker changes from a colored circle to an **orange flag** icon, making flagged buildings immediately identifiable at a glance.
 - A **🚩 FLAGGED** badge appears in the building detail header.
-- The flag is stored as part of the building record and syncs to the Google Sheet backend.
+- The flag **syncs to the Google Sheet immediately** — no need to press the Save button. Toggling the flag on or off is persisted instantly.
 
-Flagging is independent of saving: a building can be flagged without data, with partial data, or with complete saved data. Flagged buildings behave identically to other buildings in all other respects — they can be saved, edited, exported, and synced. The flag purely indicates that the data has uncertainty and should be validated during a site visit.
+Flagging is fully independent of the Save workflow. A building can be flagged without any data entered, with partial data, or with a complete saved survey. Flagged buildings behave identically to other buildings in all other respects — they can be saved, edited, exported, and synced. The flag purely indicates that the data has uncertainty and should be validated during a site visit.
 
 ---
 
