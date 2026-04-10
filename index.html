@@ -894,10 +894,12 @@ function App() {
     const b = buildings.find(x => x.uid === selected);
     if (!b) return;
     const newFlagged = form.flagged === "Yes" ? "" : "Yes";
+    // Block polling during flag sync
+    savingRef.current = true;
     // Update form immediately
     setForm(f => ({...f, flagged: newFlagged}));
     // Build the current data to persist (merge surveys/prefill with the new flag)
-    const sv = surveys[selected];
+    const sv = surveysRef.current[selected];
     const pf = b.prefill || {};
     const current = sv || pf;
     const entry = {
@@ -915,10 +917,11 @@ function App() {
     } catch (err) {
       showToast("Flag sync failed: " + err.message, "error");
       // Revert on failure
-      setForm(f => ({...f, flagged: form.flagged}));
+      setForm(f => ({...f, flagged: current.flagged || ""}));
       setSurveys(prev => ({...prev, [selected]: current}));
     } finally {
       setFlagging(false);
+      savingRef.current = false;
     }
   };
 
