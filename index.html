@@ -128,7 +128,7 @@ async function fetchSurveys(location) {
         notes: s.notes || "",
         surveyor: s.surveyor || "",
         savedAt: s.savedAt || "",
-        flagged: s.flagged || "",
+        flagged: (s.flagged && /^(yes|true|1)$/i.test(String(s.flagged).trim())) ? "Yes" : "",
         longitude: s.longitude || "",
         latitude: s.latitude || "",
         survey_type: s.survey_type || "",
@@ -169,6 +169,17 @@ async function saveSurveyEntry(uid, surveyType, nsiId, lng, lat, formData, locat
       savedAt: formData.savedAt || "",
       flagged: formData.flagged || "",
     }
+  });
+  if (resp.error) throw new Error(resp.error);
+  return resp;
+}
+
+async function updateFlagEntry(uid, flagged, location) {
+  const resp = await postJson({
+    action: "updateFlag",
+    location: location || "shinnecock",
+    uid,
+    flagged: flagged || "",
   });
   if (resp.error) throw new Error(resp.error);
   return resp;
@@ -559,6 +570,14 @@ function App() {
     if (savingRef.current) return;
     if (result.error) { console.warn("Survey refresh failed:", result.error); return; }
     const sheetData = result.data || {};
+    // Preserve local flagged values — the sheet may not have the column yet,
+    // or there may be a race between our save and this poll fetch.
+    const prev = surveysRef.current;
+    for (const uid in sheetData) {
+      if (!sheetData[uid].flagged && prev[uid] && prev[uid].flagged) {
+        sheetData[uid].flagged = prev[uid].flagged;
+      }
+    }
     setSurveys(sheetData);
     // Always rebuild buildings from sheet (even if empty — clears stale data)
     const freshBuildings = sheetDataToBuildings(sheetData);
@@ -890,7 +909,7 @@ function App() {
 
   const [flagging, setFlagging] = useState(false);
   const toggleFlag = async () => {
-    if (!selected || flagging) return;
+    if (!selected || flagging || saving) return;
     const b = buildings.find(x => x.uid === selected);
     if (!b) return;
     const newFlagged = form.flagged === "Yes" ? "" : "Yes";
@@ -898,27 +917,25 @@ function App() {
     savingRef.current = true;
     // Update form immediately
     setForm(f => ({...f, flagged: newFlagged}));
-    // Build the current data to persist (merge surveys/prefill with the new flag)
-    const sv = surveysRef.current[selected];
-    const pf = b.prefill || {};
-    const current = sv || pf;
-    const entry = {
-      ...EMPTY_FORM,
-      ...current,
-      flagged: newFlagged,
-    };
-    // Update local surveys state immediately so it survives polling
-    setSurveys(prev => ({...prev, [selected]: entry}));
-    // Sync to sheet
+    // Only patch the flagged field in surveys — preserve everything else
+    setSurveys(prev => {
+      const existing = prev[selected] || {};
+      return {...prev, [selected]: {...existing, flagged: newFlagged}};
+    });
+    // Sync only the flag to the sheet (patch, not full overwrite)
     setFlagging(true);
     try {
-      await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, entry, curLocRef.current);
+      await updateFlagEntry(selected, newFlagged, curLocRef.current);
       showToast(newFlagged === "Yes" ? "🚩 Flagged for site visit" : "Flag removed");
     } catch (err) {
       showToast("Flag sync failed: " + err.message, "error");
       // Revert on failure
-      setForm(f => ({...f, flagged: current.flagged || ""}));
-      setSurveys(prev => ({...prev, [selected]: current}));
+      const oldFlagged = newFlagged === "Yes" ? "" : "Yes";
+      setForm(f => ({...f, flagged: oldFlagged}));
+      setSurveys(prev => {
+        const existing = prev[selected] || {};
+        return {...prev, [selected]: {...existing, flagged: oldFlagged}};
+      });
     } finally {
       setFlagging(false);
       savingRef.current = false;
@@ -926,6 +943,7 @@ function App() {
   };
 
   const handleSave = async () => {
+    if (flagging) return;
     if (!form.numStories || !form.occType || !form.foundationType) {
       showToast("Stories, foundation type, and occupancy type required", "error"); return;
     }
@@ -949,12 +967,13 @@ function App() {
 
   const handleUndoSave = async () => {
     if (selected == null) return;
-    if (!confirm("⚠️ Warning: This will clear all survey data for this building (notes, surveyor, timestamp). The point will be reset to its original pre-survey state.\n\nAre you sure you want to continue?")) return;
+    if (!confirm("⚠️ Warning: This will clear all survey data for this building (notes, surveyor, timestamp). The site visit flag will be preserved.\n\nThe point will be reset to its original pre-survey state.\n\nAre you sure you want to continue?")) return;
     savingRef.current = true;
     try {
       const b = buildings.find(x => x.uid === selected);
       const pf = b?.prefill || {};
-      // Reset to prefill data with empty savedAt/surveyor/notes
+      const currentFlagged = (surveysRef.current[selected] || pf).flagged || "";
+      // Reset to prefill data with empty savedAt/surveyor/notes, but preserve flag
       const resetEntry = {
         occType: pf.occType || "", buildingType: pf.buildingType || "",
         numStories: pf.numStories || "", area: pf.area || "",
@@ -962,7 +981,7 @@ function App() {
         yearBuilt: pf.yearBuilt || "", groundElev: pf.groundElev || "",
         address: pf.address || "",
         structureValue: pf.structureValue || "", contentValue: pf.contentValue || "",
-        basement: pf.basement || "", notes: "", surveyor: "", savedAt: "", flagged: "",
+        basement: pf.basement || "", notes: "", surveyor: "", savedAt: "", flagged: currentFlagged,
       };
       // Update the sheet row (keep building in sheet but clear the survey)
       await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, resetEntry, curLocRef.current);
@@ -1495,8 +1514,8 @@ function App() {
                 </button>
               </div>
 
-              <button onClick={toggleFlag} disabled={flagging} style={{
-                width:"100%",padding:"9px",borderRadius:8,cursor:flagging?"wait":"pointer",fontWeight:700,fontSize:12,
+              <button onClick={toggleFlag} disabled={flagging||saving} style={{
+                width:"100%",padding:"9px",borderRadius:8,cursor:(flagging||saving)?"wait":"pointer",fontWeight:700,fontSize:12,
                 display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:12,
                 border:form.flagged==="Yes"?"2px solid #f97316":"1px solid #334155",
                 background:form.flagged==="Yes"?"#431407":"#1e293b",
@@ -1591,8 +1610,8 @@ function App() {
               </div>
 
               <div style={{display:"flex",gap:8,marginTop:14}}>
-                <button onClick={handleSave} disabled={saving} style={{
-                  flex:1,padding:"11px",borderRadius:9,border:"none",cursor:saving?"wait":"pointer",
+                <button onClick={handleSave} disabled={saving||flagging} style={{
+                  flex:1,padding:"11px",borderRadius:9,border:"none",cursor:(saving||flagging)?"wait":"pointer",
                   background:"linear-gradient(135deg,#16a34a,#15803d)",color:"#fff",fontWeight:700,fontSize:13,
                 }}>{saving?"Saving...":"💾 Save"}</button>
                 {surveys[selected] && surveys[selected].savedAt && <button onClick={handleUndoSave} style={{padding:"11px 14px",borderRadius:9,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:13}}>🗑 Clear</button>}
