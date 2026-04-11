@@ -825,18 +825,20 @@ function App() {
 
   useEffect(() => {
     window.__devMove = (lat, lng) => {
-      if (!selected) return;
+      const sel = window.__devSelected;
+      if (!sel) return;
       const cur = devEditsRef.current;
-      const next = { ...cur, moved: { ...cur.moved, [selected]: { lat, lng } } };
+      const next = { ...cur, moved: { ...cur.moved, [sel]: { lat, lng } } };
       commitDevEdits(next);
       setDevAction(null);
       showToast("Point moved — auto-saving...");
     };
     window.__devAdd = (lat, lng) => {
       // Check for unsaved form changes on current building
-      if (selected) {
-        const sv = surveysRef.current[selected];
-        const b0 = buildings.find(x => x.uid === selected);
+      const curSel = window.__devSelected;
+      if (curSel) {
+        const sv = surveysRef.current[curSel];
+        const b0 = buildings.find(x => x.uid === curSel);
         const baseline = sv || (b0 && b0.prefill) || EMPTY_FORM;
         const formFields = ["numStories","firstFloorHeight","address","occType","foundationType","buildingType","area","yearBuilt","groundElev","structureValue","contentValue","notes","surveyor"];
         const hasEdits = formFields.some(k => (window.__formRef[k] || "") !== (baseline[k] || ""));
@@ -873,7 +875,7 @@ function App() {
       if (mapInst.current) mapInst.current.panTo([lat, lng], {animate: true});
     };
     return () => { delete window.__devMove; delete window.__devAdd; };
-  }, [selected, showToast, commitDevEdits]);
+  }, [showToast, commitDevEdits]);
 
   const devRemove = () => {
     if (!selected) return;
