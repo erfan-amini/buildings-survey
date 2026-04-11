@@ -185,6 +185,7 @@ The left panel includes always-visible point management tools:
 |---|---|
 | **Add Point** | Click the map to place a new survey point with an auto-generated ID |
 | **Move Point** | Relocate a selected point; updated coordinates sync to the sheet |
+| **Duplicate Point** | Create a copy of the selected building with all its data, placed slightly to the right. The duplicate starts as unsaved and receives a new auto-generated ID |
 | **Remove Point** | Delete a point from the map and backend |
 
 Point edits are stored separately and can be cleared via the **Clear Edits** button, which resets both local and server-side edit state. Note that synced deletions (rows already removed from the sheet) cannot be restored through this action — use **Pull Sheet** to reload from the backend.
