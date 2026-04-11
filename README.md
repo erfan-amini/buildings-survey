@@ -21,6 +21,8 @@ Each building in the inventory exists in one of three visual states:
 | 🔵 Blue | Verify | Pre-populated NSI record requiring field confirmation |
 | 🔴 Red | New Survey | Point added during fieldwork, not in original NSI |
 | 🟢 Green | Surveyed | Completed survey with a recorded `savedAt` timestamp |
+| 🟠 Orange Flag | Flagged | Data needs in-person site visit validation |
+| ✕ Grey Cross | Demolished | Building no longer exists (buyout, demolition) |
 
 A surveyor selects a point on the map, reviews or enters the building attributes, and saves. Each save writes immediately to the backend. The **Undo Save** action resets a point to its pre-survey state without deleting the underlying row.
 
@@ -61,7 +63,7 @@ The attribute filter panel is always visible below the status filter bar and pro
 
 | Filter | Options | Description |
 |---|---|---|
-| **Flagged** | All / Flagged / Not Flagged | Filter by site visit validation flag status |
+| **Status** | All / Flagged / Demolished / Unflagged | Filter by site visit flag or demolished status |
 | **Occupancy** | All / Residential / Commercial / Industrial / Other | Filter by FEMA/Hazus occupancy class prefix |
 | **Foundation** | All / S / C / B / P / W | Filter by foundation type |
 | **Bldg Type** | All / W / M / C / S / H | Filter by construction material |
@@ -166,7 +168,7 @@ Each building record contains 21 fields:
 | `structure_value` | Structure replacement cost (USD) |
 | `content_value` | Content replacement cost (USD) |
 | `basement` | Yes / No (computed from `foundation_type`: Yes if B, No otherwise) |
-| `flagged` | Yes / (empty) — indicates data needs in-person site visit validation |
+| `flagged` | `Yes` (needs site visit), `Demolished` (building no longer exists), or empty |
 | `notes` | Free-text field observations |
 | `surveyor` | Surveyor name |
 | `savedAt` | ISO 8601 timestamp (empty = not yet surveyed) |
@@ -187,6 +189,11 @@ The left panel includes always-visible point management tools:
 | **Move Point** | Relocate a selected point; updated coordinates sync to the sheet |
 | **Duplicate Point** | Create a copy of the selected building with all its data, placed slightly to the right. The duplicate starts as unsaved and receives a new auto-generated ID |
 | **Remove Point** | Delete a point from the map and backend |
+| **Mark Demolished** | Click the map to place a demolished-site marker (grey ✕). Records the location of a building that no longer exists (e.g., buyout program). Creates a sheet row with `flagged: Demolished` and empty building fields, synced immediately |
+
+### Notes (Independent Save)
+
+The Notes field appears directly below the flag toggle and has its own **📝 Save Notes** button. This allows surveyors to record observations about any building — including unsaved or demolished points — without needing to complete or save the full building survey. Saving notes writes only the notes text to the sheet row; it does not change the building's saved/unsaved status or any other field.
 
 Point edits are stored separately and can be cleared via the **Clear Edits** button, which resets both local and server-side edit state. Note that synced deletions (rows already removed from the sheet) cannot be restored through this action — use **Pull Sheet** to reload from the backend.
 

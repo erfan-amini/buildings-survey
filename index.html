@@ -128,7 +128,7 @@ async function fetchSurveys(location) {
         notes: s.notes || "",
         surveyor: s.surveyor || "",
         savedAt: s.savedAt || "",
-        flagged: (s.flagged && /^(yes|true|1)$/i.test(String(s.flagged).trim())) ? "Yes" : "",
+        flagged: (() => { const v = String(s.flagged || "").trim(); if (/^demolished$/i.test(v)) return "Demolished"; if (/^(yes|true|1)$/i.test(v)) return "Yes"; return ""; })(),
         longitude: s.longitude || "",
         latitude: s.latitude || "",
         survey_type: s.survey_type || "",
@@ -689,7 +689,7 @@ function App() {
           window.__drawClick(e.latlng.lat, e.latlng.lng);
         } else if (devActionRef.current === "move" && selectedRef.current) {
           window.__devMove(e.latlng.lat, e.latlng.lng);
-        } else if (devActionRef.current === "add") {
+        } else if (devActionRef.current === "add" || devActionRef.current === "demolished") {
           window.__devAdd(e.latlng.lat, e.latlng.lng);
         }
       });
@@ -729,13 +729,15 @@ function App() {
     const done = !!(sv && sv.savedAt);
     const isV = b.type === "verify";
     const isFlagged = d.flagged === "Yes";
+    const isDemolished = d.flagged === "Demolished";
     // Status filter
     if (filter === "survey" && isV) return false;
     if (filter === "done" && !done) return false;
     if (filter === "pending" && done) return false;
     // Advanced filters
     if (advFilters.flagged === "yes" && !isFlagged) return false;
-    if (advFilters.flagged === "no" && isFlagged) return false;
+    if (advFilters.flagged === "no" && (isFlagged || isDemolished)) return false;
+    if (advFilters.flagged === "demolished" && !isDemolished) return false;
     if (advFilters.occClass !== "all") {
       const occ = (d.occType || "").toUpperCase();
       if (advFilters.occClass === "RES" && !occ.startsWith("RES")) return false;
@@ -766,6 +768,7 @@ function App() {
       const d = sv || pf;
       const done = !!(sv && sv.savedAt);
       const isFlagged = d.flagged === "Yes";
+      const isDemolished = d.flagged === "Demolished";
       const isV = b.type === "verify";
       const show = passesFilters(b);
 
@@ -780,6 +783,19 @@ function App() {
           iconAnchor: [4, 27],
         });
         const fm = L.marker([b.lat, b.lng], { icon: flagIcon, interactive: true, zIndexOffset: 400 }).addTo(mapInst.current);
+        fm.on("click", () => window.__sel(b.uid));
+        flagMarkersRef.current[b.uid] = fm;
+      } else if (isDemolished && L && mapInst.current) {
+        // Demolished: hide circle marker, show black ✕ icon
+        cm.setStyle({ fillOpacity: 0, opacity: 0, radius: 0 });
+        const xSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18"><line x1="3" y1="3" x2="15" y2="15" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round"/><line x1="15" y1="3" x2="3" y2="15" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round"/><line x1="3" y1="3" x2="15" y2="15" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/><line x1="15" y1="3" x2="3" y2="15" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/></svg>`;
+        const xIcon = L.divIcon({
+          html: `<div style="opacity:${show?1:0.08};transition:opacity .2s;">${xSvg}</div>`,
+          className: '',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        });
+        const fm = L.marker([b.lat, b.lng], { icon: xIcon, interactive: true, zIndexOffset: 300 }).addTo(mapInst.current);
         fm.on("click", () => window.__sel(b.uid));
         flagMarkersRef.current[b.uid] = fm;
       } else {
@@ -865,21 +881,23 @@ function App() {
       showToast("Point moved — auto-saving...");
     };
     window.__devAdd = (lat, lng) => {
-      // Check for unsaved form changes on current building
-      const curSel = selectedRef.current;
-      if (curSel) {
-        const sv = surveysRef.current[curSel];
-        const b0 = buildings.find(x => x.uid === curSel);
-        const baseline = sv || (b0 && b0.prefill) || EMPTY_FORM;
-        const formFields = ["numStories","firstFloorHeight","address","occType","foundationType","buildingType","area","yearBuilt","groundElev","structureValue","contentValue","notes","surveyor"];
-        const hasEdits = formFields.some(k => (formRef.current[k] || "") !== (baseline[k] || ""));
-        if (hasEdits) {
-          if (!confirm("⚠️ You have unsaved changes on the current building.\n\nIf you add a new point, these changes will be lost.\n\nContinue?")) return;
+      const isDemolished = devActionRef.current === "demolished";
+      // Check for unsaved form changes on current building (skip for demolished since it doesn't change form)
+      if (!isDemolished) {
+        const curSel = selectedRef.current;
+        if (curSel) {
+          const sv = surveysRef.current[curSel];
+          const b0 = buildings.find(x => x.uid === curSel);
+          const baseline = sv || (b0 && b0.prefill) || EMPTY_FORM;
+          const formFields = ["numStories","firstFloorHeight","address","occType","foundationType","buildingType","area","yearBuilt","groundElev","structureValue","contentValue","notes","surveyor"];
+          const hasEdits = formFields.some(k => (formRef.current[k] || "") !== (baseline[k] || ""));
+          if (hasEdits) {
+            if (!confirm("⚠️ You have unsaved changes on the current building.\n\nIf you add a new point, these changes will be lost.\n\nContinue?")) return;
+          }
         }
       }
 
       const cur = devEditsRef.current;
-      // Find next available ID >= 10001
       let maxNewId = 10000;
       buildings.forEach(b => {
         const id = parseInt(b.nsiId || (b.uid.startsWith("new-") ? b.uid.replace("new-","") : "0"));
@@ -895,15 +913,26 @@ function App() {
       const next = { ...cur, added: [...(cur.added||[]), newPt] };
       commitDevEdits(next);
       setDevAction(null);
-      showToast("Point #" + newId + " added — auto-saving...");
-      // Create a minimal sheet row so flags and other metadata can be persisted
-      pendingSaveRef.current = saveSurveyEntry(uid, "survey", String(newId), lng, lat, { ...EMPTY_FORM }, curLocRef.current).catch(err => {
-        console.warn("Failed to create sheet row for new point:", err);
-      }).finally(() => { pendingSaveRef.current = null; });
-      // Auto-select the new point
-      setSelected(uid);
-      setForm(EMPTY_FORM);
-      if (mapInst.current) mapInst.current.panTo([lat, lng], {animate: true});
+
+      if (isDemolished) {
+        const demData = { ...EMPTY_FORM, flagged: "Demolished" };
+        setSurveys(prev => ({...prev, [uid]: demData}));
+        pendingSaveRef.current = saveSurveyEntry(uid, "survey", String(newId), lng, lat, { ...demData, basement: "No" }, curLocRef.current).catch(err => {
+          console.warn("Failed to create demolished point row:", err);
+        }).finally(() => { pendingSaveRef.current = null; });
+        setSelected(uid);
+        setForm(demData);
+        if (mapInst.current) mapInst.current.panTo([lat, lng], {animate: true});
+        showToast("✕ Demolished site #" + newId + " marked");
+      } else {
+        pendingSaveRef.current = saveSurveyEntry(uid, "survey", String(newId), lng, lat, { ...EMPTY_FORM }, curLocRef.current).catch(err => {
+          console.warn("Failed to create sheet row for new point:", err);
+        }).finally(() => { pendingSaveRef.current = null; });
+        setSelected(uid);
+        setForm(EMPTY_FORM);
+        if (mapInst.current) mapInst.current.panTo([lat, lng], {animate: true});
+        showToast("Point #" + newId + " added — auto-saving...");
+      }
     };
     return () => { delete window.__devMove; delete window.__devAdd; };
   }, [showToast, commitDevEdits]);
@@ -1076,6 +1105,35 @@ function App() {
     }
   };
 
+  const [savingNotes, setSavingNotes] = useState(false);
+  const saveNotes = async () => {
+    if (!selected || savingNotes) return;
+    const b = buildings.find(x => x.uid === selected);
+    if (!b) return;
+    savingRef.current = true;
+    setSavingNotes(true);
+    try {
+      if (pendingSaveRef.current) {
+        await pendingSaveRef.current;
+        pendingSaveRef.current = null;
+      }
+      // Merge current notes into existing survey data without touching savedAt
+      const sv = surveysRef.current[selected];
+      const pf = b.prefill || {};
+      const current = { ...EMPTY_FORM, ...(sv || pf) };
+      const entry = { ...current, notes: form.notes };
+      const basement = (entry.foundationType || "").toUpperCase() === "B" ? "Yes" : "No";
+      await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, { ...entry, basement }, curLocRef.current);
+      setSurveys(prev => ({...prev, [selected]: entry}));
+      showToast("📝 Notes saved");
+    } catch (err) {
+      showToast("Notes save failed: " + err.message, "error");
+    } finally {
+      setSavingNotes(false);
+      savingRef.current = false;
+    }
+  };
+
   const handleSave = async () => {
     if (flagging) return;
     if (!form.numStories || !form.occType || !form.foundationType) {
@@ -1150,11 +1208,19 @@ function App() {
   };
 
   const exportXLSX = () => {
-    const savedBuildings = buildings.filter(b => surveys[b.uid] && surveys[b.uid].savedAt);
-    if (savedBuildings.length === 0) { showToast("No saved buildings to export", "error"); return; }
+    // Export saved buildings, flagged buildings, and demolished buildings
+    const exportBuildings = buildings.filter(b => {
+      const sv = surveys[b.uid];
+      const pf = b.prefill || {};
+      const d = sv || pf;
+      if (sv && sv.savedAt) return true;
+      if (d.flagged === "Yes" || d.flagged === "Demolished") return true;
+      return false;
+    });
+    if (exportBuildings.length === 0) { showToast("No buildings to export", "error"); return; }
     const headers = ["ID","occupancy_type","building_type","number_of_stories","area","foundation_type","foundation_height","year_built","ground_elevation","address","longitude","latitude","structure_value","content_value","flagged"];
     const num = v => { const n = parseFloat(v); return isFinite(n) ? n : ""; };
-    const rows = savedBuildings.map(b => {
+    const rows = exportBuildings.map(b => {
       const saved = surveys[b.uid];
       const pf = b.prefill || {};
       const s = saved || pf;
@@ -1173,7 +1239,7 @@ function App() {
     XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
     const locName = LOCATIONS[curLocRef.current].name.replace(/\s+/g, "_");
     XLSX.writeFile(wb, "DDD___" + locName + "___NSI.xlsx");
-    showToast("Exported " + savedBuildings.length + " saved buildings");
+    showToast("Exported " + exportBuildings.length + " buildings");
   };
 
   const [sheetSyncing, setSheetSyncing] = useState(false);
@@ -1416,6 +1482,7 @@ function App() {
   const pct = buildings.length ? Math.round((doneCount / buildings.length) * 100) : 0;
   const todoCount = buildings.filter(b => !(surveys[b.uid] && surveys[b.uid].savedAt)).length;
   const flaggedCount = buildings.filter(b => { const sv = surveys[b.uid]; const pf = b.prefill || {}; return (sv || pf).flagged === "Yes"; }).length;
+  const demolishedCount = buildings.filter(b => { const sv = surveys[b.uid]; const pf = b.prefill || {}; return (sv || pf).flagged === "Demolished"; }).length;
   const selB = selected ? buildings.find(x => x.uid === selected) : null;
   // Filter-aware UIDs for Prev/Next navigation
   const filteredUids = buildings.filter(b => passesFilters(b)).map(b => b.uid);
@@ -1433,6 +1500,7 @@ function App() {
       {/* ═══ LEFT PANEL: Controls ═══ */}
       <div style={{width:340,minWidth:340,display:"flex",flexDirection:"column",borderRight:"1px solid #1e293b",background:"#0f172a",overflow:"auto"}}>
         <div style={{padding:"14px 16px",flexShrink:0}}>
+          {/* ─── Header ─── */}
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
             <div style={{width:34,height:34,borderRadius:8,background:"linear-gradient(135deg,#3b82f6,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>🏗</div>
             <div>
@@ -1441,138 +1509,155 @@ function App() {
             </div>
           </div>
 
-          <select value={curLoc} onChange={e => switchLocation(e.target.value)} style={{width:"100%",padding:"7px 10px",borderRadius:7,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:13,fontWeight:600,cursor:"pointer",appearance:"auto",marginBottom:8}}>
+          <select value={curLoc} onChange={e => switchLocation(e.target.value)} style={{width:"100%",padding:"7px 10px",borderRadius:7,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:13,fontWeight:600,cursor:"pointer",appearance:"auto",marginBottom:10}}>
             {Object.entries(LOCATIONS).map(([k,v]) => <option key={k} value={k}>{v.name}</option>)}
           </select>
 
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#94a3b8",marginBottom:4}}>
-            <span>{doneCount} / {buildings.length} complete</span>
-            <span style={{fontWeight:600,color:pct===100?"#22c55e":"#f59e0b"}}>{pct}%</span>
-          </div>
-          <div style={{height:5,borderRadius:3,background:"#1e293b",marginBottom:8}}>
-            <div style={{height:5,borderRadius:3,background:pct===100?"#22c55e":"linear-gradient(90deg,#3b82f6,#8b5cf6)",width:`${pct}%`,transition:"width .4s"}}/>
-          </div>
-
-          <div style={{display:"flex",gap:12,fontSize:11,color:"#94a3b8",flexWrap:"wrap",marginBottom:8}}>
-            <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#ef4444",marginRight:4,verticalAlign:"middle"}}/>New ({surveyCount})</span>
-            <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#3b82f6",marginRight:4,verticalAlign:"middle"}}/>Verify ({verifyCount})</span>
-            <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#22c55e",marginRight:4,verticalAlign:"middle"}}/>Done ({doneCount})</span>
-            {flaggedCount > 0 && <span><svg width="10" height="12" viewBox="0 0 24 28" style={{verticalAlign:"middle",marginRight:4}}><line x1="4" y1="2" x2="4" y2="27" stroke="#b45309" strokeWidth="3"/><path d="M5 3 L21 7 L5 13 Z" fill="#f97316" stroke="#b45309" strokeWidth="1"/></svg>Flag ({flaggedCount})</span>}
-          </div>
-
-          <div style={{display:"flex",gap:4,marginBottom:8}}>
-            {[["all","All",buildings.length],["survey","New",surveyCount],["done","Done",doneCount],["pending","Todo",todoCount]].map(([k,l,n])=>(
-              <button key={k} onClick={()=>setFilter(k)} style={{
-                flex:1,padding:"4px 0",borderRadius:5,border:"none",cursor:"pointer",fontSize:10,fontWeight:600,
-                background:filter===k?"#3b82f6":"#1e293b",color:filter===k?"#fff":"#94a3b8",
-              }}>{l} ({n})</button>
-            ))}
-          </div>
-
-          {/* ─── Advanced Filters (always visible) ─── */}
-          <div style={{marginBottom:8,padding:"8px 10px",borderRadius:7,background:"#1e293b",border:"1px solid #334155",display:"flex",flexDirection:"column",gap:6}}>
-            <div style={{display:"flex",gap:6}}>
-              <div style={{flex:1}}>
-                <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Flagged</label>
-                <select value={advFilters.flagged} onChange={e=>setAdvFilters(f=>({...f,flagged:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
-                  <option value="all">All</option><option value="yes">🚩 Flagged</option><option value="no">Not Flagged</option>
-                </select>
-              </div>
-              <div style={{flex:1}}>
-                <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Occupancy</label>
-                <select value={advFilters.occClass} onChange={e=>setAdvFilters(f=>({...f,occClass:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
-                  <option value="all">All</option><option value="RES">Residential</option><option value="COM">Commercial</option><option value="IND">Industrial</option><option value="OTHER">Other</option>
-                </select>
-              </div>
+          {/* ─── Progress ─── */}
+          <div style={{borderTop:"1px solid #1e293b",paddingTop:8,marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#94a3b8",marginBottom:4}}>
+              <span>{doneCount} / {buildings.length} complete</span>
+              <span style={{fontWeight:600,color:pct===100?"#22c55e":"#f59e0b"}}>{pct}%</span>
             </div>
-            <div style={{display:"flex",gap:6}}>
-              <div style={{flex:1}}>
-                <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Foundation</label>
-                <select value={advFilters.foundation} onChange={e=>setAdvFilters(f=>({...f,foundation:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
-                  <option value="all">All</option><option value="S">Slab</option><option value="C">Crawl</option><option value="B">Basement</option><option value="P">Pier</option><option value="W">Wall</option>
-                </select>
-              </div>
-              <div style={{flex:1}}>
-                <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Bldg Type</label>
-                <select value={advFilters.bldgType} onChange={e=>setAdvFilters(f=>({...f,bldgType:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
-                  <option value="all">All</option><option value="W">Wood</option><option value="M">Masonry</option><option value="C">Concrete</option><option value="S">Steel</option><option value="H">Manuf.</option>
-                </select>
-              </div>
+            <div style={{height:5,borderRadius:3,background:"#1e293b"}}>
+              <div style={{height:5,borderRadius:3,background:pct===100?"#22c55e":"linear-gradient(90deg,#3b82f6,#8b5cf6)",width:`${pct}%`,transition:"width .4s"}}/>
             </div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:10,color:"#94a3b8"}}>{filteredUids.length} / {buildings.length} shown</span>
-              {Object.values(advFilters).some(v=>v!=="all") && (
-                <button onClick={()=>setAdvFilters({flagged:"all",occClass:"all",foundation:"all",bldgType:"all"})} style={{padding:"3px 10px",borderRadius:4,border:"none",cursor:"pointer",background:"#334155",color:"#f97316",fontSize:10,fontWeight:600}}>Clear</button>
-              )}
+            <div style={{display:"flex",gap:10,marginTop:6,fontSize:11,color:"#94a3b8",flexWrap:"wrap"}}>
+              <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#ef4444",marginRight:4,verticalAlign:"middle"}}/>New ({surveyCount})</span>
+              <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#3b82f6",marginRight:4,verticalAlign:"middle"}}/>Verify ({verifyCount})</span>
+              <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#22c55e",marginRight:4,verticalAlign:"middle"}}/>Done ({doneCount})</span>
+              {flaggedCount > 0 && <span><svg width="10" height="12" viewBox="0 0 24 28" style={{verticalAlign:"middle",marginRight:4}}><line x1="4" y1="2" x2="4" y2="27" stroke="#b45309" strokeWidth="3"/><path d="M5 3 L21 7 L5 13 Z" fill="#f97316" stroke="#b45309" strokeWidth="1"/></svg>Flag ({flaggedCount})</span>}
+              {demolishedCount > 0 && <span><svg width="12" height="12" viewBox="0 0 18 18" style={{verticalAlign:"middle",marginRight:4}}><line x1="4" y1="4" x2="14" y2="14" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/><line x1="14" y1="4" x2="4" y2="14" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/></svg>Demolished ({demolishedCount})</span>}
             </div>
           </div>
 
-          <div style={{display:"flex",gap:5,marginBottom:5}}>
-            <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest</button>
-            <button onClick={exportXLSX} style={abtn("#7c3aed")}>📥 Export</button>
+          {/* ─── Filters ─── */}
+          <div style={{borderTop:"1px solid #1e293b",paddingTop:8,marginBottom:10}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Filters</div>
+            <div style={{display:"flex",gap:4,marginBottom:6}}>
+              {[["all","All",buildings.length],["survey","New",surveyCount],["done","Done",doneCount],["pending","Todo",todoCount]].map(([k,l,n])=>(
+                <button key={k} onClick={()=>setFilter(k)} style={{
+                  flex:1,padding:"4px 0",borderRadius:5,border:"none",cursor:"pointer",fontSize:10,fontWeight:600,
+                  background:filter===k?"#3b82f6":"#1e293b",color:filter===k?"#fff":"#94a3b8",
+                }}>{l} ({n})</button>
+              ))}
+            </div>
+            <div style={{padding:"8px 10px",borderRadius:7,background:"#1e293b",border:"1px solid #334155",display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{display:"flex",gap:6}}>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Status</label>
+                  <select value={advFilters.flagged} onChange={e=>setAdvFilters(f=>({...f,flagged:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                    <option value="all">All</option><option value="yes">🚩 Flagged</option><option value="demolished">✕ Demolished</option><option value="no">Unflagged</option>
+                  </select>
+                </div>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Occupancy</label>
+                  <select value={advFilters.occClass} onChange={e=>setAdvFilters(f=>({...f,occClass:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                    <option value="all">All</option><option value="RES">Residential</option><option value="COM">Commercial</option><option value="IND">Industrial</option><option value="OTHER">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Foundation</label>
+                  <select value={advFilters.foundation} onChange={e=>setAdvFilters(f=>({...f,foundation:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                    <option value="all">All</option><option value="S">Slab</option><option value="C">Crawl</option><option value="B">Basement</option><option value="P">Pier</option><option value="W">Wall</option>
+                  </select>
+                </div>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Bldg Type</label>
+                  <select value={advFilters.bldgType} onChange={e=>setAdvFilters(f=>({...f,bldgType:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                    <option value="all">All</option><option value="W">Wood</option><option value="M">Masonry</option><option value="C">Concrete</option><option value="S">Steel</option><option value="H">Manuf.</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:10,color:"#94a3b8"}}>{filteredUids.length} / {buildings.length} shown</span>
+                {Object.values(advFilters).some(v=>v!=="all") && (
+                  <button onClick={()=>setAdvFilters({flagged:"all",occClass:"all",foundation:"all",bldgType:"all"})} style={{padding:"3px 10px",borderRadius:4,border:"none",cursor:"pointer",background:"#334155",color:"#f97316",fontSize:10,fontWeight:600}}>Clear</button>
+                )}
+              </div>
+            </div>
           </div>
-          <div style={{display:"flex",gap:5,marginBottom:5}}>
-            <button onClick={()=>window.open(SHEET_URL,"_blank")} style={abtn("#0369a1")}>📊 Sheet</button>
-            <button onClick={()=>window.open(README_URL,"_blank")} style={abtn("#475569")}>📖 Docs</button>
-          </div>
-          <div style={{display:"flex",gap:5,marginBottom:10}}>
-            <button onClick={pullFromSheet} disabled={pulling} style={abtn("#1d4ed8")}>{pulling ? "⏳..." : "⬇ Pull"}</button>
-            <button onClick={syncAllToSheet} disabled={sheetSyncing} style={abtn("#b45309")}>{sheetSyncing ? "⏳..." : "☁️ Sync"}</button>
+
+          {/* ─── Actions ─── */}
+          <div style={{borderTop:"1px solid #1e293b",paddingTop:8,marginBottom:10}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Actions</div>
+            <div style={{display:"flex",gap:5,marginBottom:5}}>
+              <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest</button>
+              <button onClick={exportXLSX} style={abtn("#7c3aed")}>📥 Export</button>
+            </div>
+            <div style={{display:"flex",gap:5,marginBottom:5}}>
+              <button onClick={()=>window.open(SHEET_URL,"_blank")} style={abtn("#0369a1")}>📊 Sheet</button>
+              <button onClick={()=>window.open(README_URL,"_blank")} style={abtn("#475569")}>📖 Docs</button>
+            </div>
+            <div style={{display:"flex",gap:5}}>
+              <button onClick={pullFromSheet} disabled={pulling} style={abtn("#1d4ed8")}>{pulling ? "⏳..." : "⬇ Pull"}</button>
+              <button onClick={syncAllToSheet} disabled={sheetSyncing} style={abtn("#b45309")}>{sheetSyncing ? "⏳..." : "☁️ Sync"}</button>
+            </div>
           </div>
 
           {/* ─── Point Management ─── */}
-          <div style={{padding:"10px 12px",borderRadius:8,background:"#1c1917",border:"1px solid #422006"}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#fbbf24",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Point Management</div>
-            <div style={{display:"flex",gap:5,marginBottom:6}}>
-              <button onClick={()=>setDevAction(devAction==="add"?null:"add")} style={{
-                flex:1,padding:"6px",borderRadius:6,border:devAction==="add"?"2px solid #22c55e":"1px solid #334155",
-                cursor:"pointer",background:devAction==="add"?"#14532d":"#1e293b",
-                color:devAction==="add"?"#4ade80":"#94a3b8",fontWeight:600,fontSize:11,
-              }}>{devAction==="add"?"🟢 Click Map...":"➕ Add"}</button>
-              <button onClick={()=>{
-                if (!selected) { showToast("Select a point first","error"); return; }
-                setDevAction(devAction==="move"?null:"move");
-              }} style={{
-                flex:1,padding:"6px",borderRadius:6,border:devAction==="move"?"2px solid #3b82f6":"1px solid #334155",
-                cursor:"pointer",background:devAction==="move"?"#1e3a5f":"#1e293b",
-                color:devAction==="move"?"#60a5fa":"#94a3b8",fontWeight:600,fontSize:11,
-              }}>{devAction==="move"?"🔵 Click Map...":"✥ Move"}</button>
-            </div>
-            <div style={{display:"flex",gap:5,marginBottom:6}}>
-              <button onClick={()=>{
-                if (!selected) { showToast("Select a point first","error"); return; }
-                devDuplicate();
-              }} style={{flex:1,padding:"6px",borderRadius:6,border:"1px solid #334155",cursor:"pointer",background:"#1e293b",color:"#a78bfa",fontWeight:600,fontSize:11}}>
-                📋 Duplicate
-              </button>
-              <button onClick={()=>{
-                if (!selected) { showToast("Select a point first","error"); return; }
-                devRemove();
-              }} style={{flex:1,padding:"6px",borderRadius:6,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:11}}>
-                🗑 Remove
-              </button>
-            </div>
-            {devEditCount > 0 && (
-              <div style={{display:"flex",gap:5}}>
-                <button onClick={()=>{ if (confirm("Clear all edits and sync?\n\nSynced deletions cannot be restored. Use Pull Sheet to reload.")) devResetAll(); }} style={{
-                  flex:1,padding:"5px",borderRadius:5,border:"1px solid #334155",cursor:"pointer",background:"#1e293b",color:"#f59e0b",fontWeight:600,fontSize:10,
-                }}>↩ Clear ({devEditCount})</button>
-                {devDirty && (
-                  <button onClick={devSyncToServer} disabled={devSyncing} style={{
-                    flex:1,padding:"5px",borderRadius:5,border:"none",cursor:devSyncing?"wait":"pointer",
-                    background:devSyncing?"#334155":"#16a34a",color:"#fff",fontWeight:600,fontSize:10,
-                  }}>{devSyncing ? "⏳..." : "☁️ Sync Now"}</button>
-                )}
+          <div style={{borderTop:"1px solid #1e293b",paddingTop:8}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Point Management</div>
+            <div style={{padding:"10px 12px",borderRadius:8,background:"#1c1917",border:"1px solid #422006"}}>
+              <div style={{display:"flex",gap:5,marginBottom:6}}>
+                <button onClick={()=>setDevAction(devAction==="add"?null:"add")} style={{
+                  flex:1,padding:"6px",borderRadius:6,border:devAction==="add"?"2px solid #22c55e":"1px solid #334155",
+                  cursor:"pointer",background:devAction==="add"?"#14532d":"#1e293b",
+                  color:devAction==="add"?"#4ade80":"#94a3b8",fontWeight:600,fontSize:11,
+                }}>{devAction==="add"?"🟢 Click Map...":"➕ Add"}</button>
+                <button onClick={()=>{
+                  if (!selected) { showToast("Select a point first","error"); return; }
+                  setDevAction(devAction==="move"?null:"move");
+                }} style={{
+                  flex:1,padding:"6px",borderRadius:6,border:devAction==="move"?"2px solid #3b82f6":"1px solid #334155",
+                  cursor:"pointer",background:devAction==="move"?"#1e3a5f":"#1e293b",
+                  color:devAction==="move"?"#60a5fa":"#94a3b8",fontWeight:600,fontSize:11,
+                }}>{devAction==="move"?"🔵 Click Map...":"✥ Move"}</button>
               </div>
-            )}
-            {!devDirty && devEditCount > 0 && (
-              <div style={{marginTop:5,fontSize:10,color:"#4ade80",textAlign:"center"}}>✓ Synced</div>
-            )}
-            {selected && selB && (
-              <div style={{marginTop:5,fontSize:10,color:"#a8a29e",lineHeight:1.4}}>
-                Selected: <b style={{color:"#fbbf24"}}>{selB.uid}</b> at {selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}
+              <div style={{display:"flex",gap:5,marginBottom:6}}>
+                <button onClick={()=>{
+                  if (!selected) { showToast("Select a point first","error"); return; }
+                  devDuplicate();
+                }} style={{flex:1,padding:"6px",borderRadius:6,border:"1px solid #334155",cursor:"pointer",background:"#1e293b",color:"#a78bfa",fontWeight:600,fontSize:11}}>
+                  📋 Duplicate
+                </button>
+                <button onClick={()=>{
+                  if (!selected) { showToast("Select a point first","error"); return; }
+                  devRemove();
+                }} style={{flex:1,padding:"6px",borderRadius:6,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:11}}>
+                  🗑 Remove
+                </button>
               </div>
-            )}
+              <button onClick={()=>setDevAction(devAction==="demolished"?null:"demolished")} style={{
+                width:"100%",padding:"6px",borderRadius:6,marginBottom:6,
+                border:devAction==="demolished"?"2px solid #94a3b8":"1px solid #334155",
+                cursor:"pointer",background:devAction==="demolished"?"#334155":"#1e293b",
+                color:devAction==="demolished"?"#e2e8f0":"#94a3b8",fontWeight:600,fontSize:11,
+              }}>{devAction==="demolished"?"✕ Click Map to Mark...":"✕ Mark Demolished"}</button>
+              {devEditCount > 0 && (
+                <div style={{display:"flex",gap:5}}>
+                  <button onClick={()=>{ if (confirm("Clear all edits and sync?\n\nSynced deletions cannot be restored. Use Pull Sheet to reload.")) devResetAll(); }} style={{
+                    flex:1,padding:"5px",borderRadius:5,border:"1px solid #334155",cursor:"pointer",background:"#1e293b",color:"#f59e0b",fontWeight:600,fontSize:10,
+                  }}>↩ Clear ({devEditCount})</button>
+                  {devDirty && (
+                    <button onClick={devSyncToServer} disabled={devSyncing} style={{
+                      flex:1,padding:"5px",borderRadius:5,border:"none",cursor:devSyncing?"wait":"pointer",
+                      background:devSyncing?"#334155":"#16a34a",color:"#fff",fontWeight:600,fontSize:10,
+                    }}>{devSyncing ? "⏳..." : "☁️ Sync Now"}</button>
+                  )}
+                </div>
+              )}
+              {!devDirty && devEditCount > 0 && (
+                <div style={{marginTop:5,fontSize:10,color:"#4ade80",textAlign:"center"}}>✓ Synced</div>
+              )}
+              {selected && selB && (
+                <div style={{marginTop:5,fontSize:10,color:"#a8a29e",lineHeight:1.4}}>
+                  Selected: <b style={{color:"#fbbf24"}}>{selB.uid}</b> at {selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1584,11 +1669,11 @@ function App() {
           <div style={{
             position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",zIndex:1000,
             padding:"8px 20px",borderRadius:8,
-            background:devAction==="add"?"rgba(22,101,52,.9)":"rgba(30,58,138,.9)",
+            background:devAction==="add"?"rgba(22,101,52,.9)":devAction==="demolished"?"rgba(51,65,85,.9)":"rgba(30,58,138,.9)",
             color:"#fff",fontWeight:600,fontSize:13,boxShadow:"0 4px 16px rgba(0,0,0,.4)",
             display:"flex",alignItems:"center",gap:10,
           }}>
-            {devAction==="add" ? "➕ Click map to place new point" : "✥ Click map to move selected point"}
+            {devAction==="add" ? "➕ Click map to place new point" : devAction==="demolished" ? "✕ Click map to mark demolished site" : "✥ Click map to move selected point"}
             <button onClick={()=>setDevAction(null)} style={{background:"rgba(255,255,255,.2)",border:"none",color:"#fff",borderRadius:4,padding:"2px 8px",cursor:"pointer",fontWeight:700}}>Cancel</button>
           </div>
         )}
@@ -1649,6 +1734,7 @@ function App() {
                     }}>{selB.type==="verify"?"VERIFY":"NEW"}</span>
                     {surveys[selected] && surveys[selected].savedAt && <span style={{marginLeft:4,fontSize:9,padding:"2px 6px",borderRadius:4,background:"#166534",color:"#4ade80"}}>SAVED</span>}
                     {((surveys[selected] || (selB && selB.prefill) || {}).flagged === "Yes") && <span style={{marginLeft:4,fontSize:9,padding:"2px 6px",borderRadius:4,background:"#431407",color:"#fb923c"}}>🚩</span>}
+                    {((surveys[selected] || (selB && selB.prefill) || {}).flagged === "Demolished") && <span style={{marginLeft:4,fontSize:9,padding:"2px 6px",borderRadius:4,background:"#334155",color:"#94a3b8"}}>✕ DEMOLISHED</span>}
                   </div>
                   <div style={{fontSize:10,color:"#64748b",marginTop:1}}>{selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}</div>
                 </div>
@@ -1664,13 +1750,26 @@ function App() {
                 </button>
               </div>
 
+              {/* ─── Flag + Notes (independent of Save) ─── */}
               <button onClick={toggleFlag} disabled={flagging||saving} style={{
                 width:"100%",padding:"7px",borderRadius:7,cursor:(flagging||saving)?"wait":"pointer",fontWeight:700,fontSize:11,
-                display:"flex",alignItems:"center",justifyContent:"center",gap:5,marginBottom:10,
-                border:form.flagged==="Yes"?"2px solid #f97316":"1px solid #334155",
-                background:form.flagged==="Yes"?"#431407":"#1e293b",
-                color:form.flagged==="Yes"?"#fb923c":"#94a3b8",
-              }}>{flagging?"⏳ Syncing...":form.flagged==="Yes"?"🚩 Flagged — Needs Site Visit":"🏳️ Flag for Site Visit"}</button>
+                display:"flex",alignItems:"center",justifyContent:"center",gap:5,marginBottom:6,
+                border:form.flagged==="Yes"?"2px solid #f97316":form.flagged==="Demolished"?"2px solid #64748b":"1px solid #334155",
+                background:form.flagged==="Yes"?"#431407":form.flagged==="Demolished"?"#1e293b":"#1e293b",
+                color:form.flagged==="Yes"?"#fb923c":form.flagged==="Demolished"?"#94a3b8":"#94a3b8",
+              }}>{flagging?"⏳ Syncing...":form.flagged==="Yes"?"🚩 Flagged — Needs Site Visit":form.flagged==="Demolished"?"✕ Marked as Demolished":"🏳️ Flag for Site Visit"}</button>
+
+              <div style={{marginBottom:10}}>
+                <FLD label="Notes">
+                  <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Observations, comments..." rows={2} style={{...inp,resize:"vertical",marginBottom:4}}/>
+                </FLD>
+                <button onClick={saveNotes} disabled={savingNotes} style={{
+                  width:"100%",padding:"6px",borderRadius:6,border:"none",cursor:savingNotes?"wait":"pointer",
+                  background:"#334155",color:"#e2e8f0",fontWeight:600,fontSize:11,
+                }}>{savingNotes?"⏳ Saving...":"📝 Save Notes"}</button>
+              </div>
+
+              <div style={{borderTop:"1px solid #1e293b",paddingTop:10}}>
 
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 <FLD label="Surveyor">
@@ -1754,9 +1853,7 @@ function App() {
                   </FLD>
                   <button onClick={autoEstimateCost} title="OLS regression estimate" style={{padding:"7px 8px",borderRadius:6,border:"1px solid #334155",cursor:"pointer",background:"#1e3a5f",color:"#60a5fa",fontWeight:700,fontSize:9,whiteSpace:"nowrap"}}>💰</button>
                 </div>
-                <FLD label="Notes">
-                  <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Observations..." rows={2} style={{...inp,resize:"vertical"}}/>
-                </FLD>
+              </div>
               </div>
 
               <div style={{display:"flex",gap:6,marginTop:10}}>
@@ -1779,7 +1876,7 @@ function App() {
       <style>{`
         .leaflet-container { background: #0f172a !important; }
         ${(devAction || drawingMode) ? '.leaflet-container { cursor: crosshair !important; }' : ''}
-        ${(drawingMode || devAction === "move") ? '.leaflet-marker-pane, .leaflet-overlay-pane circle, .leaflet-overlay-pane path { pointer-events: none !important; }' : ''}
+        ${(drawingMode || devAction === "move" || devAction === "demolished") ? '.leaflet-marker-pane, .leaflet-overlay-pane circle, .leaflet-overlay-pane path { pointer-events: none !important; }' : ''}
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
