@@ -923,6 +923,47 @@ function App() {
     showToast("Point removed — auto-saving...", "info");
   };
 
+  const devDuplicate = () => {
+    if (!selected) return;
+    const b = buildings.find(x => x.uid === selected);
+    if (!b) return;
+    const cur = devEditsRef.current;
+    // Find next available ID
+    let maxNewId = 10000;
+    buildings.forEach(bi => {
+      const id = parseInt(bi.nsiId || (bi.uid.startsWith("new-") ? bi.uid.replace("new-","") : "0"));
+      if (id >= 10000 && id > maxNewId) maxNewId = id;
+    });
+    (cur.added||[]).forEach(a => {
+      const id = parseInt(a.nsiId || "0");
+      if (id >= 10000 && id > maxNewId) maxNewId = id;
+    });
+    const newId = maxNewId + 1;
+    const uid = "new-" + newId;
+    // Offset slightly to the right (~15m at mid-latitudes)
+    const offsetLng = b.lng + 0.00015;
+    const newPt = { uid, type: "survey", nsiId: String(newId), lng: offsetLng, lat: b.lat, prefill: null };
+    const next = { ...cur, added: [...(cur.added||[]), newPt] };
+    commitDevEdits(next);
+    // Copy all current data from the source building
+    const sv = surveysRef.current[selected];
+    const pf = b.prefill || {};
+    const sourceData = { ...EMPTY_FORM, ...(sv || pf) };
+    // Clear savedAt so the duplicate starts as unsaved
+    const dupData = { ...sourceData, savedAt: "" };
+    setSurveys(prev => ({...prev, [uid]: dupData}));
+    // Create sheet row with the duplicated data
+    const basement = (dupData.foundationType || "").toUpperCase() === "B" ? "Yes" : "No";
+    saveSurveyEntry(uid, "survey", String(newId), offsetLng, b.lat, { ...dupData, basement }, curLocRef.current).catch(err => {
+      console.warn("Failed to create sheet row for duplicated point:", err);
+    });
+    // Select the new duplicate
+    setSelected(uid);
+    setForm(dupData);
+    if (mapInst.current) mapInst.current.panTo([b.lat, offsetLng], {animate: true});
+    showToast("Point #" + newId + " duplicated from " + (b.nsiId || b.uid));
+  };
+
   const devResetAll = async () => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     savingRef.current = true;
@@ -1484,6 +1525,14 @@ function App() {
                 cursor:"pointer",background:devAction==="move"?"#1e3a5f":"#1e293b",
                 color:devAction==="move"?"#60a5fa":"#94a3b8",fontWeight:600,fontSize:11,
               }}>{devAction==="move"?"🔵 Click Map...":"✥ Move"}</button>
+            </div>
+            <div style={{display:"flex",gap:5,marginBottom:6}}>
+              <button onClick={()=>{
+                if (!selected) { showToast("Select a point first","error"); return; }
+                devDuplicate();
+              }} style={{flex:1,padding:"6px",borderRadius:6,border:"1px solid #334155",cursor:"pointer",background:"#1e293b",color:"#a78bfa",fontWeight:600,fontSize:11}}>
+                📋 Duplicate
+              </button>
               <button onClick={()=>{
                 if (!selected) { showToast("Select a point first","error"); return; }
                 if (confirm("Remove this building point?")) devRemove();
