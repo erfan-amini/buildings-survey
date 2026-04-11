@@ -34,7 +34,9 @@ Buildings whose data has uncertainty or needs in-person confirmation can be flag
 
 > **Backend setup:** The Google Sheet for each study area must have a `flagged` column header, and the Apps Script must include the `handleUpdateFlag` action. The provided Apps Script backend supports this out of the box.
 
-Flagging is fully independent of the Save workflow. A building can be flagged without any data entered, with partial data, or with a complete saved survey. The flag and Save buttons are mutually exclusive — one is disabled while the other is in flight — preventing write races. Clearing a survey (Undo Save) preserves the flag; it must be toggled off separately.
+Flagging is fully independent of the Save workflow. A building can be flagged without any data entered, with partial data, or with a complete saved survey. When a point that has no sheet row yet (e.g., a newly added red point) is flagged, the tool automatically creates a minimal row in the Google Sheet to persist the flag. The flag and Save buttons are mutually exclusive — one is disabled while the other is in flight — preventing write races. Clearing a survey (Undo Save) preserves the flag; it must be toggled off separately.
+
+When new points are added via Point Management, a placeholder row is immediately created in the Google Sheet with just the coordinates and ID, ensuring that flags and other metadata can be persisted before the surveyor fills in the full form.
 
 ---
 
