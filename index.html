@@ -69,7 +69,7 @@ const OCC_TYPES = [
 ];
 
 const EMPTY_FORM = {
-  numStories: "", firstFloorHeight: "", basement: "", address: "",
+  numStories: "", firstFloorHeight: "", address: "",
   occType: "", foundationType: "", buildingType: "", area: "",
   yearBuilt: "", groundElev: "", structureValue: "", contentValue: "",
   notes: "", surveyor: "", flagged: "",
@@ -163,7 +163,7 @@ async function saveSurveyEntry(uid, surveyType, nsiId, lng, lat, formData, locat
       latitude: lat,
       structure_value: formData.structureValue || "",
       content_value: formData.contentValue || "",
-      basement: formData.basement || "",
+      basement: (formData.foundationType || "").toUpperCase() === "B" ? "Yes" : (formData.basement || "No"),
       notes: formData.notes || "",
       surveyor: formData.surveyor || "",
       savedAt: formData.savedAt || "",
@@ -364,7 +364,17 @@ function applyDevEdits(base, edits) {
     if (edits.moved[b.uid]) return { ...b, lat: edits.moved[b.uid].lat, lng: edits.moved[b.uid].lng };
     return b;
   });
-  edits.added.forEach(a => list.push(a));
+  // Add dev-added points, skipping any that already exist in base (from sheet row auto-creation)
+  const baseUids = new Set(list.map(b => b.uid));
+  edits.added.forEach(a => {
+    if (baseUids.has(a.uid)) return; // already in sheet, skip duplicate
+    // Apply moved coordinates to added points too
+    if (edits.moved[a.uid]) {
+      list.push({ ...a, lat: edits.moved[a.uid].lat, lng: edits.moved[a.uid].lng });
+    } else {
+      list.push(a);
+    }
+  });
   return list;
 }
 
@@ -567,6 +577,9 @@ function App() {
   }, []);
   const savingRef = useRef(false);
   const surveysRef = useRef(surveys);
+  const devActionRef = useRef(null);
+  const selectedRef = useRef(null);
+  const formRef = useRef(EMPTY_FORM);
   useEffect(() => { surveysRef.current = surveys; }, [surveys]);
 
   // Dev edits: localStorage helper
@@ -673,9 +686,9 @@ function App() {
       map.on("click", (e) => {
         if (window.__drawMode && window.__drawClick) {
           window.__drawClick(e.latlng.lat, e.latlng.lng);
-        } else if (window.__devAction === "move" && window.__devSelected) {
+        } else if (devActionRef.current === "move" && selectedRef.current) {
           window.__devMove(e.latlng.lat, e.latlng.lng);
-        } else if (window.__devAction === "add") {
+        } else if (devActionRef.current === "add") {
           window.__devAdd(e.latlng.lat, e.latlng.lng);
         }
       });
@@ -717,7 +730,6 @@ function App() {
     const isFlagged = d.flagged === "Yes";
     // Status filter
     if (filter === "survey" && isV) return false;
-    if (filter === "verify" && !isV) return false;
     if (filter === "done" && !done) return false;
     if (filter === "pending" && done) return false;
     // Advanced filters
@@ -800,10 +812,22 @@ function App() {
 
   useEffect(() => {
     window.__sel = (uid) => {
-      if (window.__devAction) return;
-      if (window.__drawMode) return; // don't select during drawing
+      if (devActionRef.current) return;
+      if (window.__drawMode) return;
       const b = buildings.find(x => x.uid === uid);
       if (!b) return;
+      // Skip warning if clicking the already-selected building
+      const curSel = selectedRef.current;
+      if (curSel && curSel !== uid && formRef.current) {
+        const sv = surveysRef.current[curSel];
+        const b0 = buildings.find(x => x.uid === curSel);
+        const baseline = sv || (b0 && b0.prefill) || EMPTY_FORM;
+        const formFields = ["numStories","firstFloorHeight","address","occType","foundationType","buildingType","area","yearBuilt","groundElev","structureValue","contentValue","notes","surveyor"];
+        const hasEdits = formFields.some(k => (formRef.current[k] || "") !== (baseline[k] || ""));
+        if (hasEdits) {
+          if (!confirm("⚠️ You have unsaved changes on the current building.\n\nIf you switch to another building, these changes will be lost.\n\nContinue?")) return;
+        }
+      }
       setSelected(uid);
       const existing = surveys[uid];
       if (existing) setForm({...EMPTY_FORM, ...existing});
@@ -816,32 +840,38 @@ function App() {
 
   // Dev mode handlers exposed to map click
   useEffect(() => {
-    window.__devAction = devAction;
-    window.__devSelected = selected;
+    devActionRef.current = devAction;
+    selectedRef.current = selected;
   }, [devAction, selected]);
 
-  // Keep form accessible for unsaved-changes check in devAdd
-  useEffect(() => { window.__formRef = form; }, [form]);
+  // Keep form ref current for unsaved-changes checks
+  useEffect(() => { formRef.current = form; }, [form]);
 
   useEffect(() => {
     window.__devMove = (lat, lng) => {
-      const sel = window.__devSelected;
+      const sel = selectedRef.current;
       if (!sel) return;
       const cur = devEditsRef.current;
       const next = { ...cur, moved: { ...cur.moved, [sel]: { lat, lng } } };
+      // Immediately update the marker position without waiting for full rebuild
+      const existingMarker = markersRef.current[sel];
+      if (existingMarker) existingMarker.setLatLng([lat, lng]);
+      const existingFlag = flagMarkersRef.current[sel];
+      if (existingFlag) existingFlag.setLatLng([lat, lng]);
+      if (selRingRef.current) selRingRef.current.setLatLng([lat, lng]);
       commitDevEdits(next);
       setDevAction(null);
       showToast("Point moved — auto-saving...");
     };
     window.__devAdd = (lat, lng) => {
       // Check for unsaved form changes on current building
-      const curSel = window.__devSelected;
+      const curSel = selectedRef.current;
       if (curSel) {
         const sv = surveysRef.current[curSel];
         const b0 = buildings.find(x => x.uid === curSel);
         const baseline = sv || (b0 && b0.prefill) || EMPTY_FORM;
         const formFields = ["numStories","firstFloorHeight","address","occType","foundationType","buildingType","area","yearBuilt","groundElev","structureValue","contentValue","notes","surveyor"];
-        const hasEdits = formFields.some(k => (window.__formRef[k] || "") !== (baseline[k] || ""));
+        const hasEdits = formFields.some(k => (formRef.current[k] || "") !== (baseline[k] || ""));
         if (hasEdits) {
           if (!confirm("⚠️ You have unsaved changes on the current building.\n\nIf you add a new point, these changes will be lost.\n\nContinue?")) return;
         }
@@ -1032,7 +1062,7 @@ function App() {
         yearBuilt: pf.yearBuilt || "", groundElev: pf.groundElev || "",
         address: pf.address || "",
         structureValue: pf.structureValue || "", contentValue: pf.contentValue || "",
-        basement: pf.basement || "", notes: "", surveyor: "", savedAt: "", flagged: currentFlagged,
+        basement: pf.foundationType === "B" ? "Yes" : "No", notes: "", surveyor: "", savedAt: "", flagged: currentFlagged,
       };
       // Update the sheet row (keep building in sheet but clear the survey)
       await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, resetEntry, curLocRef.current);
@@ -1122,7 +1152,7 @@ function App() {
           latitude: String(b.lat),
           structure_value: s.structureValue || "",
           content_value: s.contentValue || "",
-          basement: s.basement || "",
+          basement: (s.foundationType || "").toUpperCase() === "B" ? "Yes" : "No",
           notes: s.notes || "",
           surveyor: s.surveyor || "",
           savedAt: s.savedAt || "",
@@ -1688,7 +1718,7 @@ function App() {
       <style>{`
         .leaflet-container { background: #0f172a !important; }
         ${(devAction || drawingMode) ? '.leaflet-container { cursor: crosshair !important; }' : ''}
-        ${drawingMode ? '.leaflet-marker-pane, .leaflet-overlay-pane circle, .leaflet-overlay-pane path { pointer-events: none !important; }' : ''}
+        ${(drawingMode || devAction === "move") ? '.leaflet-marker-pane, .leaflet-overlay-pane circle, .leaflet-overlay-pane path { pointer-events: none !important; }' : ''}
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
