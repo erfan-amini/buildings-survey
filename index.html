@@ -580,6 +580,7 @@ function App() {
   const devActionRef = useRef(null);
   const selectedRef = useRef(null);
   const formRef = useRef(EMPTY_FORM);
+  const pendingSaveRef = useRef(null); // tracks in-flight row creation for new points
   useEffect(() => { surveysRef.current = surveys; }, [surveys]);
 
   // Dev edits: localStorage helper
@@ -896,9 +897,9 @@ function App() {
       setDevAction(null);
       showToast("Point #" + newId + " added — auto-saving...");
       // Create a minimal sheet row so flags and other metadata can be persisted
-      saveSurveyEntry(uid, "survey", String(newId), lng, lat, { ...EMPTY_FORM }, curLocRef.current).catch(err => {
+      pendingSaveRef.current = saveSurveyEntry(uid, "survey", String(newId), lng, lat, { ...EMPTY_FORM }, curLocRef.current).catch(err => {
         console.warn("Failed to create sheet row for new point:", err);
-      });
+      }).finally(() => { pendingSaveRef.current = null; });
       // Auto-select the new point
       setSelected(uid);
       setForm(EMPTY_FORM);
@@ -907,20 +908,30 @@ function App() {
     return () => { delete window.__devMove; delete window.__devAdd; };
   }, [showToast, commitDevEdits]);
 
-  const devRemove = () => {
+  const devRemove = async () => {
     if (!selected) return;
+    const b = buildings.find(x => x.uid === selected);
+    const bLabel = b ? (b.nsiId || b.uid) : selected;
+    if (!confirm("⚠️ Remove building #" + bLabel + "?\n\nThis will permanently delete the point and ALL of its data (survey fields, notes, flag) from the map and the Google Sheet.\n\nThis action cannot be undone.\n\nContinue?")) return;
+    const uidToRemove = selected;
     const cur = devEditsRef.current;
     const newMoved = { ...cur.moved };
-    delete newMoved[selected];
+    delete newMoved[uidToRemove];
     const next = {
-      removed: [...(cur.removed||[]), selected],
+      removed: [...(cur.removed||[]), uidToRemove],
       moved: newMoved,
-      added: (cur.added||[]).filter(a => a.uid !== selected),
+      added: (cur.added||[]).filter(a => a.uid !== uidToRemove),
     };
     commitDevEdits(next);
-    setSurveys(prev => { const u = {...prev}; delete u[selected]; return u; });
+    setSurveys(prev => { const u = {...prev}; delete u[uidToRemove]; return u; });
     setSelected(null); setForm(EMPTY_FORM);
-    showToast("Point removed — auto-saving...", "info");
+    // Delete from sheet immediately — don't wait for debounce
+    try {
+      await deleteSurveyEntry(uidToRemove, curLocRef.current);
+      showToast("Point #" + bLabel + " removed & deleted from Sheet", "info");
+    } catch (err) {
+      showToast("Point removed locally but sheet delete failed: " + err.message, "error");
+    }
   };
 
   const devDuplicate = () => {
@@ -954,9 +965,9 @@ function App() {
     setSurveys(prev => ({...prev, [uid]: dupData}));
     // Create sheet row with the duplicated data
     const basement = (dupData.foundationType || "").toUpperCase() === "B" ? "Yes" : "No";
-    saveSurveyEntry(uid, "survey", String(newId), offsetLng, b.lat, { ...dupData, basement }, curLocRef.current).catch(err => {
+    pendingSaveRef.current = saveSurveyEntry(uid, "survey", String(newId), offsetLng, b.lat, { ...dupData, basement }, curLocRef.current).catch(err => {
       console.warn("Failed to create sheet row for duplicated point:", err);
-    });
+    }).finally(() => { pendingSaveRef.current = null; });
     // Select the new duplicate
     setSelected(uid);
     setForm(dupData);
@@ -1030,6 +1041,11 @@ function App() {
     });
     setFlagging(true);
     try {
+      // Wait for any in-flight row creation to complete first (prevents race with devAdd)
+      if (pendingSaveRef.current) {
+        await pendingSaveRef.current;
+        pendingSaveRef.current = null;
+      }
       const result = await updateFlagEntry(selected, newFlagged, curLocRef.current);
       if (result && result.needsRow) {
         // Row doesn't exist yet — create it using the live form data
@@ -1535,7 +1551,7 @@ function App() {
               </button>
               <button onClick={()=>{
                 if (!selected) { showToast("Select a point first","error"); return; }
-                if (confirm("Remove this building point?")) devRemove();
+                devRemove();
               }} style={{flex:1,padding:"6px",borderRadius:6,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:11}}>
                 🗑 Remove
               </button>
