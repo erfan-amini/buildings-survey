@@ -486,7 +486,6 @@ function App() {
   const [toast, setToast] = useState(null);
   const [filter, setFilter] = useState("all");
   const [advFilters, setAdvFilters] = useState({ flagged: "all", occClass: "all", foundation: "all", bldgType: "all" });
-  const [showAdvFilters, setShowAdvFilters] = useState(false);
   const [devAction, setDevAction] = useState(null); // "move" | "add" | null
   const [devEdits, setDevEdits] = useState({ removed: [], moved: {}, added: [] });
   const [devDirty, setDevDirty] = useState(false);
@@ -1305,153 +1304,138 @@ function App() {
       )}
 
       {/* ═══ LEFT PANEL: Controls ═══ */}
-      <div style={{width:300,minWidth:300,display:"flex",flexDirection:"column",borderRight:"1px solid #1e293b",background:"#0f172a",overflow:"auto"}}>
-        <div style={{padding:"12px 14px",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <div style={{width:30,height:30,borderRadius:7,background:"linear-gradient(135deg,#3b82f6,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>🏗</div>
+      <div style={{width:340,minWidth:340,display:"flex",flexDirection:"column",borderRight:"1px solid #1e293b",background:"#0f172a",overflow:"auto"}}>
+        <div style={{padding:"14px 16px",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div style={{width:34,height:34,borderRadius:8,background:"linear-gradient(135deg,#3b82f6,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>🏗</div>
             <div>
-              <div style={{fontWeight:700,fontSize:14,color:"#f8fafc"}}>NSI Field Survey Tool</div>
-              <div style={{fontSize:10,color:"#64748b"}}>{LOCATIONS[curLoc].name} — {buildings.length} buildings</div>
+              <div style={{fontWeight:700,fontSize:15,color:"#f8fafc"}}>NSI Field Survey Tool</div>
+              <div style={{fontSize:11,color:"#64748b"}}>{LOCATIONS[curLoc].name} — {buildings.length} buildings</div>
             </div>
           </div>
 
-          <select value={curLoc} onChange={e => switchLocation(e.target.value)} style={{width:"100%",padding:"6px 8px",borderRadius:6,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:12,fontWeight:600,cursor:"pointer",appearance:"auto",marginBottom:8}}>
+          <select value={curLoc} onChange={e => switchLocation(e.target.value)} style={{width:"100%",padding:"7px 10px",borderRadius:7,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:13,fontWeight:600,cursor:"pointer",appearance:"auto",marginBottom:8}}>
             {Object.entries(LOCATIONS).map(([k,v]) => <option key={k} value={k}>{v.name}</option>)}
           </select>
 
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#94a3b8",marginBottom:3}}>
-            <span>{doneCount}/{buildings.length} done</span>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#94a3b8",marginBottom:4}}>
+            <span>{doneCount} / {buildings.length} complete</span>
             <span style={{fontWeight:600,color:pct===100?"#22c55e":"#f59e0b"}}>{pct}%</span>
           </div>
-          <div style={{height:4,borderRadius:3,background:"#1e293b",marginBottom:6}}>
-            <div style={{height:4,borderRadius:3,background:pct===100?"#22c55e":"linear-gradient(90deg,#3b82f6,#8b5cf6)",width:`${pct}%`,transition:"width .4s"}}/>
+          <div style={{height:5,borderRadius:3,background:"#1e293b",marginBottom:8}}>
+            <div style={{height:5,borderRadius:3,background:pct===100?"#22c55e":"linear-gradient(90deg,#3b82f6,#8b5cf6)",width:`${pct}%`,transition:"width .4s"}}/>
           </div>
 
-          <div style={{display:"flex",gap:8,fontSize:10,color:"#94a3b8",flexWrap:"wrap",marginBottom:6}}>
-            <span><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:"#ef4444",marginRight:3,verticalAlign:"middle"}}/>New ({surveyCount})</span>
-            <span><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:"#3b82f6",marginRight:3,verticalAlign:"middle"}}/>Verify ({verifyCount})</span>
-            <span><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:"#22c55e",marginRight:3,verticalAlign:"middle"}}/>Done ({doneCount})</span>
-            {flaggedCount > 0 && <span><svg width="9" height="11" viewBox="0 0 24 28" style={{verticalAlign:"middle",marginRight:3}}><line x1="4" y1="2" x2="4" y2="27" stroke="#b45309" strokeWidth="3"/><path d="M5 3 L21 7 L5 13 Z" fill="#f97316" stroke="#b45309" strokeWidth="1"/></svg>Flag ({flaggedCount})</span>}
+          <div style={{display:"flex",gap:12,fontSize:11,color:"#94a3b8",flexWrap:"wrap",marginBottom:8}}>
+            <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#ef4444",marginRight:4,verticalAlign:"middle"}}/>New ({surveyCount})</span>
+            <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#3b82f6",marginRight:4,verticalAlign:"middle"}}/>Verify ({verifyCount})</span>
+            <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#22c55e",marginRight:4,verticalAlign:"middle"}}/>Done ({doneCount})</span>
+            {flaggedCount > 0 && <span><svg width="10" height="12" viewBox="0 0 24 28" style={{verticalAlign:"middle",marginRight:4}}><line x1="4" y1="2" x2="4" y2="27" stroke="#b45309" strokeWidth="3"/><path d="M5 3 L21 7 L5 13 Z" fill="#f97316" stroke="#b45309" strokeWidth="1"/></svg>Flag ({flaggedCount})</span>}
           </div>
 
-          <div style={{display:"flex",gap:3,marginBottom:6}}>
-            {[["all","All",buildings.length],["survey","New",surveyCount],["verify","Verify",verifyCount],["done","Done",doneCount],["pending","Todo",todoCount]].map(([k,l,n])=>(
+          <div style={{display:"flex",gap:4,marginBottom:8}}>
+            {[["all","All",buildings.length],["survey","New",surveyCount],["done","Done",doneCount],["pending","Todo",todoCount]].map(([k,l,n])=>(
               <button key={k} onClick={()=>setFilter(k)} style={{
-                flex:1,padding:"3px 0",borderRadius:4,border:"none",cursor:"pointer",fontSize:9,fontWeight:600,
+                flex:1,padding:"4px 0",borderRadius:5,border:"none",cursor:"pointer",fontSize:10,fontWeight:600,
                 background:filter===k?"#3b82f6":"#1e293b",color:filter===k?"#fff":"#94a3b8",
               }}>{l} ({n})</button>
             ))}
           </div>
 
-          <button onClick={()=>setShowAdvFilters(v=>!v)} style={{
-            width:"100%",padding:"4px 0",borderRadius:4,border:"1px solid #334155",cursor:"pointer",
-            background:showAdvFilters||Object.values(advFilters).some(v=>v!=="all")?"#1e3a5f":"#1e293b",
-            color:Object.values(advFilters).some(v=>v!=="all")?"#f97316":"#94a3b8",fontSize:9,fontWeight:600,
-            display:"flex",alignItems:"center",justifyContent:"center",gap:3,marginBottom:6,
-          }}>
-            🔎 Filters {Object.values(advFilters).filter(v=>v!=="all").length > 0 && `(${Object.values(advFilters).filter(v=>v!=="all").length})`}
-            <span style={{fontSize:7}}>{showAdvFilters?"▲":"▼"}</span>
-          </button>
-          {showAdvFilters && (
-            <div style={{marginBottom:6,padding:"6px 8px",borderRadius:6,background:"#1e293b",border:"1px solid #334155",display:"flex",flexDirection:"column",gap:5}}>
-              <div style={{display:"flex",gap:5}}>
-                <div style={{flex:1}}>
-                  <label style={{fontSize:8,fontWeight:700,color:"#94a3b8",textTransform:"uppercase"}}>Flagged</label>
-                  <select value={advFilters.flagged} onChange={e=>setAdvFilters(f=>({...f,flagged:e.target.value}))} style={{width:"100%",padding:"4px",borderRadius:4,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:10,appearance:"auto"}}>
-                    <option value="all">All</option><option value="yes">🚩 Flagged</option><option value="no">Not Flagged</option>
-                  </select>
-                </div>
-                <div style={{flex:1}}>
-                  <label style={{fontSize:8,fontWeight:700,color:"#94a3b8",textTransform:"uppercase"}}>Occupancy</label>
-                  <select value={advFilters.occClass} onChange={e=>setAdvFilters(f=>({...f,occClass:e.target.value}))} style={{width:"100%",padding:"4px",borderRadius:4,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:10,appearance:"auto"}}>
-                    <option value="all">All</option><option value="RES">Residential</option><option value="COM">Commercial</option><option value="IND">Industrial</option><option value="OTHER">Other</option>
-                  </select>
-                </div>
+          {/* ─── Advanced Filters (always visible) ─── */}
+          <div style={{marginBottom:8,padding:"8px 10px",borderRadius:7,background:"#1e293b",border:"1px solid #334155",display:"flex",flexDirection:"column",gap:6}}>
+            <div style={{display:"flex",gap:6}}>
+              <div style={{flex:1}}>
+                <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Flagged</label>
+                <select value={advFilters.flagged} onChange={e=>setAdvFilters(f=>({...f,flagged:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                  <option value="all">All</option><option value="yes">🚩 Flagged</option><option value="no">Not Flagged</option>
+                </select>
               </div>
-              <div style={{display:"flex",gap:5}}>
-                <div style={{flex:1}}>
-                  <label style={{fontSize:8,fontWeight:700,color:"#94a3b8",textTransform:"uppercase"}}>Foundation</label>
-                  <select value={advFilters.foundation} onChange={e=>setAdvFilters(f=>({...f,foundation:e.target.value}))} style={{width:"100%",padding:"4px",borderRadius:4,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:10,appearance:"auto"}}>
-                    <option value="all">All</option><option value="S">Slab</option><option value="C">Crawl</option><option value="B">Basement</option><option value="P">Pier</option><option value="W">Wall</option>
-                  </select>
-                </div>
-                <div style={{flex:1}}>
-                  <label style={{fontSize:8,fontWeight:700,color:"#94a3b8",textTransform:"uppercase"}}>Bldg Type</label>
-                  <select value={advFilters.bldgType} onChange={e=>setAdvFilters(f=>({...f,bldgType:e.target.value}))} style={{width:"100%",padding:"4px",borderRadius:4,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:10,appearance:"auto"}}>
-                    <option value="all">All</option><option value="W">Wood</option><option value="M">Masonry</option><option value="C">Concrete</option><option value="S">Steel</option><option value="H">Manuf.</option>
-                  </select>
-                </div>
-              </div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:9,color:"#94a3b8"}}>{filteredUids.length}/{buildings.length} shown</span>
-                {Object.values(advFilters).some(v=>v!=="all") && (
-                  <button onClick={()=>setAdvFilters({flagged:"all",occClass:"all",foundation:"all",bldgType:"all"})} style={{padding:"2px 8px",borderRadius:3,border:"none",cursor:"pointer",background:"#334155",color:"#f97316",fontSize:9,fontWeight:600}}>Clear</button>
-                )}
+              <div style={{flex:1}}>
+                <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Occupancy</label>
+                <select value={advFilters.occClass} onChange={e=>setAdvFilters(f=>({...f,occClass:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                  <option value="all">All</option><option value="RES">Residential</option><option value="COM">Commercial</option><option value="IND">Industrial</option><option value="OTHER">Other</option>
+                </select>
               </div>
             </div>
-          )}
-
-          <div style={{display:"flex",gap:3,marginBottom:5}}>
-            <input type="text" placeholder="Search ID..." value={searchId} onChange={e=>setSearchId(e.target.value)} onKeyDown={e=>{if(e.key==="Enter") searchById();}} style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:11}}/>
-            <button onClick={searchById} style={{padding:"5px 10px",borderRadius:6,border:"none",cursor:"pointer",background:"#334155",color:"#e2e8f0",fontWeight:700,fontSize:11}}>🔍</button>
+            <div style={{display:"flex",gap:6}}>
+              <div style={{flex:1}}>
+                <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Foundation</label>
+                <select value={advFilters.foundation} onChange={e=>setAdvFilters(f=>({...f,foundation:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                  <option value="all">All</option><option value="S">Slab</option><option value="C">Crawl</option><option value="B">Basement</option><option value="P">Pier</option><option value="W">Wall</option>
+                </select>
+              </div>
+              <div style={{flex:1}}>
+                <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Bldg Type</label>
+                <select value={advFilters.bldgType} onChange={e=>setAdvFilters(f=>({...f,bldgType:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
+                  <option value="all">All</option><option value="W">Wood</option><option value="M">Masonry</option><option value="C">Concrete</option><option value="S">Steel</option><option value="H">Manuf.</option>
+                </select>
+              </div>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:10,color:"#94a3b8"}}>{filteredUids.length} / {buildings.length} shown</span>
+              {Object.values(advFilters).some(v=>v!=="all") && (
+                <button onClick={()=>setAdvFilters({flagged:"all",occClass:"all",foundation:"all",bldgType:"all"})} style={{padding:"3px 10px",borderRadius:4,border:"none",cursor:"pointer",background:"#334155",color:"#f97316",fontSize:10,fontWeight:600}}>Clear</button>
+              )}
+            </div>
           </div>
 
-          <div style={{display:"flex",gap:4,marginBottom:4}}>
+          <div style={{display:"flex",gap:5,marginBottom:5}}>
             <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest</button>
             <button onClick={exportXLSX} style={abtn("#7c3aed")}>📥 Export</button>
           </div>
-          <div style={{display:"flex",gap:4,marginBottom:4}}>
+          <div style={{display:"flex",gap:5,marginBottom:5}}>
             <button onClick={()=>window.open(SHEET_URL,"_blank")} style={abtn("#0369a1")}>📊 Sheet</button>
             <button onClick={()=>window.open(README_URL,"_blank")} style={abtn("#475569")}>📖 Docs</button>
           </div>
-          <div style={{display:"flex",gap:4,marginBottom:8}}>
+          <div style={{display:"flex",gap:5,marginBottom:10}}>
             <button onClick={pullFromSheet} disabled={pulling} style={abtn("#1d4ed8")}>{pulling ? "⏳..." : "⬇ Pull"}</button>
             <button onClick={syncAllToSheet} disabled={sheetSyncing} style={abtn("#b45309")}>{sheetSyncing ? "⏳..." : "☁️ Sync"}</button>
           </div>
 
-          {/* ─── Point Management (always visible) ─── */}
-          <div style={{padding:"8px 10px",borderRadius:7,background:"#1c1917",border:"1px solid #422006"}}>
-            <div style={{fontSize:10,fontWeight:700,color:"#fbbf24",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Point Management</div>
-            <div style={{display:"flex",gap:4,marginBottom:5}}>
+          {/* ─── Point Management ─── */}
+          <div style={{padding:"10px 12px",borderRadius:8,background:"#1c1917",border:"1px solid #422006"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#fbbf24",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Point Management</div>
+            <div style={{display:"flex",gap:5,marginBottom:6}}>
               <button onClick={()=>setDevAction(devAction==="add"?null:"add")} style={{
-                flex:1,padding:"5px",borderRadius:5,border:devAction==="add"?"2px solid #22c55e":"1px solid #334155",
+                flex:1,padding:"6px",borderRadius:6,border:devAction==="add"?"2px solid #22c55e":"1px solid #334155",
                 cursor:"pointer",background:devAction==="add"?"#14532d":"#1e293b",
-                color:devAction==="add"?"#4ade80":"#94a3b8",fontWeight:600,fontSize:10,
+                color:devAction==="add"?"#4ade80":"#94a3b8",fontWeight:600,fontSize:11,
               }}>{devAction==="add"?"🟢 Click Map...":"➕ Add"}</button>
               <button onClick={()=>{
                 if (!selected) { showToast("Select a point first","error"); return; }
                 setDevAction(devAction==="move"?null:"move");
               }} style={{
-                flex:1,padding:"5px",borderRadius:5,border:devAction==="move"?"2px solid #3b82f6":"1px solid #334155",
+                flex:1,padding:"6px",borderRadius:6,border:devAction==="move"?"2px solid #3b82f6":"1px solid #334155",
                 cursor:"pointer",background:devAction==="move"?"#1e3a5f":"#1e293b",
-                color:devAction==="move"?"#60a5fa":"#94a3b8",fontWeight:600,fontSize:10,
+                color:devAction==="move"?"#60a5fa":"#94a3b8",fontWeight:600,fontSize:11,
               }}>{devAction==="move"?"🔵 Click Map...":"✥ Move"}</button>
               <button onClick={()=>{
                 if (!selected) { showToast("Select a point first","error"); return; }
                 if (confirm("Remove this building point?")) devRemove();
-              }} style={{flex:1,padding:"5px",borderRadius:5,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:10}}>
+              }} style={{flex:1,padding:"6px",borderRadius:6,border:"1px solid #7f1d1d",cursor:"pointer",background:"#1e293b",color:"#f87171",fontWeight:600,fontSize:11}}>
                 🗑 Remove
               </button>
             </div>
             {devEditCount > 0 && (
-              <div style={{display:"flex",gap:4}}>
-                <button onClick={()=>{ if (confirm("Clear all edits (moves, adds, removes) and sync?\n\nNote: Synced deletions cannot be restored. Use Pull Sheet to reload.")) devResetAll(); }} style={{
-                  flex:1,padding:"4px",borderRadius:4,border:"1px solid #334155",cursor:"pointer",background:"#1e293b",color:"#f59e0b",fontWeight:600,fontSize:9,
+              <div style={{display:"flex",gap:5}}>
+                <button onClick={()=>{ if (confirm("Clear all edits and sync?\n\nSynced deletions cannot be restored. Use Pull Sheet to reload.")) devResetAll(); }} style={{
+                  flex:1,padding:"5px",borderRadius:5,border:"1px solid #334155",cursor:"pointer",background:"#1e293b",color:"#f59e0b",fontWeight:600,fontSize:10,
                 }}>↩ Clear ({devEditCount})</button>
                 {devDirty && (
                   <button onClick={devSyncToServer} disabled={devSyncing} style={{
-                    flex:1,padding:"4px",borderRadius:4,border:"none",cursor:devSyncing?"wait":"pointer",
-                    background:devSyncing?"#334155":"#16a34a",color:"#fff",fontWeight:600,fontSize:9,
+                    flex:1,padding:"5px",borderRadius:5,border:"none",cursor:devSyncing?"wait":"pointer",
+                    background:devSyncing?"#334155":"#16a34a",color:"#fff",fontWeight:600,fontSize:10,
                   }}>{devSyncing ? "⏳..." : "☁️ Sync Now"}</button>
                 )}
               </div>
             )}
             {!devDirty && devEditCount > 0 && (
-              <div style={{marginTop:4,fontSize:9,color:"#4ade80",textAlign:"center"}}>✓ Synced</div>
+              <div style={{marginTop:5,fontSize:10,color:"#4ade80",textAlign:"center"}}>✓ Synced</div>
             )}
             {selected && selB && (
-              <div style={{marginTop:4,fontSize:9,color:"#a8a29e",lineHeight:1.3}}>
-                Sel: <b style={{color:"#fbbf24"}}>{selB.uid}</b> ({selB.lat.toFixed(5)}, {selB.lng.toFixed(5)})
+              <div style={{marginTop:5,fontSize:10,color:"#a8a29e",lineHeight:1.4}}>
+                Selected: <b style={{color:"#fbbf24"}}>{selB.uid}</b> at {selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}
               </div>
             )}
           </div>
@@ -1499,6 +1483,10 @@ function App() {
       {/* ═══ RIGHT PANEL: Building Detail ═══ */}
       <div style={{width:380,minWidth:380,display:"flex",flexDirection:"column",borderLeft:"1px solid #1e293b",background:"#0f172a",overflow:"auto"}}>
         <div style={{padding:"12px 14px"}}>
+          <div style={{display:"flex",gap:4,marginBottom:12}}>
+            <input type="text" placeholder="Search by ID..." value={searchId} onChange={e=>setSearchId(e.target.value)} onKeyDown={e=>{if(e.key==="Enter") searchById();}} style={{flex:1,padding:"7px 10px",borderRadius:7,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:12}}/>
+            <button onClick={searchById} style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",background:"#334155",color:"#e2e8f0",fontWeight:700,fontSize:12}}>🔍</button>
+          </div>
           {buildings.length === 0 && !loading ? (
             <div style={{textAlign:"center",marginTop:60,color:"#475569"}}>
               <div style={{fontSize:40,marginBottom:8}}>☁️</div>
