@@ -183,14 +183,16 @@ async function updateFlagEntry(uid, flagged, location) {
       flagged: flagged || "",
     });
     if (resp.error && resp.error.includes("Unknown action")) {
-      // Fallback: backend doesn't support updateFlag yet — skip (flag saved on next full save)
       console.warn("updateFlag not supported by backend, flag will persist on next Save");
       return { ok: true, fallback: true };
+    }
+    if (resp.error && resp.error.includes("UID not found")) {
+      // Row doesn't exist yet — let caller handle by creating the row
+      return { ok: false, error: resp.error, needsRow: true };
     }
     if (resp.error) throw new Error(resp.error);
     return resp;
   } catch (err) {
-    // Network or parse errors — rethrow
     throw err;
   }
 }
@@ -846,6 +848,10 @@ function App() {
       commitDevEdits(next);
       setDevAction(null);
       showToast("Point #" + newId + " added — auto-saving...");
+      // Create a minimal sheet row so flags and other metadata can be persisted
+      saveSurveyEntry(uid, "survey", String(newId), lng, lat, { ...EMPTY_FORM }, curLocRef.current).catch(err => {
+        console.warn("Failed to create sheet row for new point:", err);
+      });
     };
     return () => { delete window.__devMove; delete window.__devAdd; };
   }, [selected, showToast, commitDevEdits]);
@@ -933,7 +939,15 @@ function App() {
     // Sync only the flag to the sheet (patch, not full overwrite)
     setFlagging(true);
     try {
-      await updateFlagEntry(selected, newFlagged, curLocRef.current);
+      const result = await updateFlagEntry(selected, newFlagged, curLocRef.current);
+      // If row doesn't exist yet (unsaved point), create it with a full save
+      if (result && result.needsRow) {
+        const sv = surveysRef.current[selected];
+        const pf = b.prefill || {};
+        const current = sv || pf;
+        const minimalEntry = { ...EMPTY_FORM, ...current, flagged: newFlagged };
+        await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, minimalEntry, curLocRef.current);
+      }
       showToast(newFlagged === "Yes" ? "🚩 Flagged for site visit" : "Flag removed");
     } catch (err) {
       showToast("Flag sync failed: " + err.message, "error");
@@ -1024,10 +1038,11 @@ function App() {
   };
 
   const exportXLSX = () => {
-    if (buildings.length === 0) { showToast("No buildings to export", "error"); return; }
+    const savedBuildings = buildings.filter(b => surveys[b.uid] && surveys[b.uid].savedAt);
+    if (savedBuildings.length === 0) { showToast("No saved buildings to export", "error"); return; }
     const headers = ["ID","occupancy_type","building_type","number_of_stories","area","foundation_type","foundation_height","year_built","ground_elevation","address","longitude","latitude","structure_value","content_value","flagged"];
     const num = v => { const n = parseFloat(v); return isFinite(n) ? n : ""; };
-    const rows = buildings.map(b => {
+    const rows = savedBuildings.map(b => {
       const saved = surveys[b.uid];
       const pf = b.prefill || {};
       const s = saved || pf;
@@ -1046,7 +1061,7 @@ function App() {
     XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
     const locName = LOCATIONS[curLocRef.current].name.replace(/\s+/g, "_");
     XLSX.writeFile(wb, "DDD___" + locName + "___NSI.xlsx");
-    showToast("Exported " + buildings.length + " buildings");
+    showToast("Exported " + savedBuildings.length + " saved buildings");
   };
 
   const [sheetSyncing, setSheetSyncing] = useState(false);
