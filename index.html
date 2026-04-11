@@ -1031,7 +1031,6 @@ function App() {
     if (!b) return;
     const newFlagged = form.flagged === "Yes" ? "" : "Yes";
     savingRef.current = true;
-    // Capture the current form state BEFORE any async work — this is the source of truth
     const currentForm = { ...form, flagged: newFlagged };
     // Update UI immediately
     setForm(f => ({...f, flagged: newFlagged}));
@@ -1041,39 +1040,36 @@ function App() {
     });
     setFlagging(true);
     try {
-      // Wait for any in-flight row creation to complete first (prevents race with devAdd)
+      // Wait for any in-flight row creation to complete first
       if (pendingSaveRef.current) {
         await pendingSaveRef.current;
         pendingSaveRef.current = null;
       }
-      const result = await updateFlagEntry(selected, newFlagged, curLocRef.current);
-      if (result && result.needsRow) {
-        // Row doesn't exist yet — create it using the live form data
-        const basement = currentForm.foundationType === "B" ? "Yes" : "No";
+      // Try the patch-only approach first
+      let patchSucceeded = false;
+      try {
+        const result = await updateFlagEntry(selected, newFlagged, curLocRef.current);
+        patchSucceeded = result && result.ok && !result.fallback && !result.needsRow;
+      } catch (e) {
+        // patch failed — fall through to full save
+      }
+      // If patch didn't succeed for any reason, do a full row save to guarantee persistence
+      if (!patchSucceeded) {
+        const basement = (currentForm.foundationType || "").toUpperCase() === "B" ? "Yes" : "No";
         const entry = { ...currentForm, basement };
         await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, entry, curLocRef.current);
         setSurveys(prev => ({...prev, [selected]: entry}));
       }
       showToast(newFlagged === "Yes" ? "🚩 Flagged for site visit" : "Flag removed");
     } catch (err) {
-      // updateFlagEntry threw (network error, unexpected backend error, etc.)
-      // Fall back to a full save with live form data to ensure flag is persisted
-      try {
-        const basement = currentForm.foundationType === "B" ? "Yes" : "No";
-        const entry = { ...currentForm, basement };
-        await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, entry, curLocRef.current);
-        setSurveys(prev => ({...prev, [selected]: entry}));
-        showToast(newFlagged === "Yes" ? "🚩 Flagged for site visit" : "Flag removed");
-      } catch (err2) {
-        showToast("Flag sync failed: " + err2.message, "error");
-        // Revert UI on total failure
-        const oldFlagged = newFlagged === "Yes" ? "" : "Yes";
-        setForm(f => ({...f, flagged: oldFlagged}));
-        setSurveys(prev => {
-          const existing = prev[selected] || {};
-          return {...prev, [selected]: {...existing, flagged: oldFlagged}};
-        });
-      }
+      showToast("Flag sync failed: " + err.message, "error");
+      // Revert UI on total failure
+      const oldFlagged = newFlagged === "Yes" ? "" : "Yes";
+      setForm(f => ({...f, flagged: oldFlagged}));
+      setSurveys(prev => {
+        const existing = prev[selected] || {};
+        return {...prev, [selected]: {...existing, flagged: oldFlagged}};
+      });
     } finally {
       setFlagging(false);
       savingRef.current = false;
