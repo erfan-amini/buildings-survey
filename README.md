@@ -30,9 +30,11 @@ Buildings whose data has uncertainty or needs in-person confirmation can be flag
 
 - Its map marker changes from a colored circle to an **orange flag** icon, making flagged buildings immediately identifiable at a glance.
 - A **🚩 FLAGGED** badge appears in the building detail header.
-- The flag **syncs to the Google Sheet immediately** — no need to press the Save button. Toggling the flag on or off is persisted instantly.
+- The flag **syncs to the Google Sheet immediately** via a dedicated patch operation — no need to press the Save button. Only the `flagged` column is updated, so toggling the flag never overwrites other fields or discards unsaved form edits.
 
-Flagging is fully independent of the Save workflow. A building can be flagged without any data entered, with partial data, or with a complete saved survey. Flagged buildings behave identically to other buildings in all other respects — they can be saved, edited, exported, and synced. The flag purely indicates that the data has uncertainty and should be validated during a site visit.
+> **Backend setup:** The Google Sheet for each study area must have a `flagged` column header, and the Apps Script must include the `handleUpdateFlag` action. The provided Apps Script backend supports this out of the box.
+
+Flagging is fully independent of the Save workflow. A building can be flagged without any data entered, with partial data, or with a complete saved survey. The flag and Save buttons are mutually exclusive — one is disabled while the other is in flight — preventing write races. Clearing a survey (Undo Save) preserves the flag; it must be toggled off separately.
 
 ---
 
