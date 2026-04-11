@@ -1683,22 +1683,6 @@ function App() {
                   <input type="number" min="1" max="99" value={form.numStories} onChange={e=>setForm(f=>({...f,numStories:e.target.value}))} style={inp}/>
                 </FLD>
                 <div style={{display:"flex",gap:6}}>
-                  <FLD label="Foundation Type *" s={{flex:1}}>
-                    <select value={form.foundationType} onChange={e=>setForm(f=>({...f,foundationType:e.target.value}))} style={{...inp,appearance:"auto"}}>
-                      <option value="">— Select —</option>
-                      <option value="S">S — Slab on Grade</option>
-                      <option value="C">C — Crawlspace</option>
-                      <option value="B">B — Basement</option>
-                      <option value="P">P — Pier/Pile</option>
-                      <option value="W">W — Solid Wall</option>
-                      <option value="U">U — Unknown</option>
-                    </select>
-                  </FLD>
-                  <FLD label="1st Floor Ht (ft)" s={{flex:1}}>
-                    <input type="number" min="0" max="30" step="0.5" value={form.firstFloorHeight} onChange={e=>setForm(f=>({...f,firstFloorHeight:e.target.value}))} style={inp}/>
-                  </FLD>
-                </div>
-                <div style={{display:"flex",gap:6}}>
                   <FLD label="Occupancy Type *" s={{flex:2}}>
                     <select value={form.occType} onChange={e=>setForm(f=>({...f,occType:e.target.value}))} style={{...inp,appearance:"auto"}}>
                       <option value="">— Select —</option>
@@ -1725,6 +1709,22 @@ function App() {
                       <option value="S">S — Steel</option>
                       <option value="H">H — Manufactured</option>
                     </select>
+                  </FLD>
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  <FLD label="Foundation Type *" s={{flex:1}}>
+                    <select value={form.foundationType} onChange={e=>setForm(f=>({...f,foundationType:e.target.value}))} style={{...inp,appearance:"auto"}}>
+                      <option value="">— Select —</option>
+                      <option value="S">S — Slab on Grade</option>
+                      <option value="C">C — Crawlspace</option>
+                      <option value="B">B — Basement</option>
+                      <option value="P">P — Pier/Pile</option>
+                      <option value="W">W — Solid Wall</option>
+                      <option value="U">U — Unknown</option>
+                    </select>
+                  </FLD>
+                  <FLD label="1st Floor Ht (ft)" s={{flex:1}}>
+                    <input type="number" min="0" max="30" step="0.5" value={form.firstFloorHeight} onChange={e=>setForm(f=>({...f,firstFloorHeight:e.target.value}))} style={inp}/>
                   </FLD>
                 </div>
                 <div style={{display:"flex",gap:3,alignItems:"flex-end"}}>
