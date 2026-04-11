@@ -52,13 +52,12 @@ The primary filter bar provides quick access to survey workflow states:
 |---|---|
 | **All** | All buildings |
 | **New** | New survey points (red markers) |
-| **Verify** | NSI records requiring verification (blue markers) |
 | **Done** | Buildings with completed surveys (green markers) |
 | **Todo** | Buildings not yet surveyed |
 
 ### Advanced Attribute Filters
 
-The **🔎 Advanced Filters** panel (collapsible) provides combinable attribute-based filters:
+The attribute filter panel is always visible below the status filter bar and provides combinable attribute-based filters:
 
 | Filter | Options | Description |
 |---|---|---|
@@ -166,7 +165,7 @@ Each building record contains 21 fields:
 | `latitude` | WGS84 latitude |
 | `structure_value` | Structure replacement cost (USD) |
 | `content_value` | Content replacement cost (USD) |
-| `basement` | Yes / No |
+| `basement` | Yes / No (computed from `foundation_type`: Yes if B, No otherwise) |
 | `flagged` | Yes / (empty) — indicates data needs in-person site visit validation |
 | `notes` | Free-text field observations |
 | `surveyor` | Surveyor name |
@@ -178,9 +177,9 @@ NSI buildings retain their original numeric IDs. New buildings added through the
 
 ---
 
-## Developer Mode
+## Point Management
 
-An optional developer mode provides geometry editing capabilities:
+The left panel includes always-visible point management tools:
 
 | Action | Description |
 |---|---|
@@ -188,7 +187,7 @@ An optional developer mode provides geometry editing capabilities:
 | **Move Point** | Relocate a selected point; updated coordinates sync to the sheet |
 | **Remove Point** | Delete a point from the map and backend |
 
-Developer edits are stored separately and can be cleared via the **Clear Edits** button, which resets both local and server-side edit state. Note that synced deletions (rows already removed from the sheet) cannot be restored through this action — use **Pull Sheet** to reload from the backend.
+Point edits are stored separately and can be cleared via the **Clear Edits** button, which resets both local and server-side edit state. Note that synced deletions (rows already removed from the sheet) cannot be restored through this action — use **Pull Sheet** to reload from the backend.
 
 ---
 
