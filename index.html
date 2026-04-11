@@ -820,6 +820,9 @@ function App() {
     window.__devSelected = selected;
   }, [devAction, selected]);
 
+  // Keep form accessible for unsaved-changes check in devAdd
+  useEffect(() => { window.__formRef = form; }, [form]);
+
   useEffect(() => {
     window.__devMove = (lat, lng) => {
       if (!selected) return;
@@ -830,6 +833,18 @@ function App() {
       showToast("Point moved — auto-saving...");
     };
     window.__devAdd = (lat, lng) => {
+      // Check for unsaved form changes on current building
+      if (selected) {
+        const sv = surveysRef.current[selected];
+        const b0 = buildings.find(x => x.uid === selected);
+        const baseline = sv || (b0 && b0.prefill) || EMPTY_FORM;
+        const formFields = ["numStories","firstFloorHeight","address","occType","foundationType","buildingType","area","yearBuilt","groundElev","structureValue","contentValue","notes","surveyor"];
+        const hasEdits = formFields.some(k => (window.__formRef[k] || "") !== (baseline[k] || ""));
+        if (hasEdits) {
+          if (!confirm("⚠️ You have unsaved changes on the current building.\n\nIf you add a new point, these changes will be lost.\n\nContinue?")) return;
+        }
+      }
+
       const cur = devEditsRef.current;
       // Find next available ID >= 10001
       let maxNewId = 10000;
@@ -852,6 +867,10 @@ function App() {
       saveSurveyEntry(uid, "survey", String(newId), lng, lat, { ...EMPTY_FORM }, curLocRef.current).catch(err => {
         console.warn("Failed to create sheet row for new point:", err);
       });
+      // Auto-select the new point
+      setSelected(uid);
+      setForm(EMPTY_FORM);
+      if (mapInst.current) mapInst.current.panTo([lat, lng], {animate: true});
     };
     return () => { delete window.__devMove; delete window.__devAdd; };
   }, [selected, showToast, commitDevEdits]);
@@ -927,37 +946,45 @@ function App() {
     const b = buildings.find(x => x.uid === selected);
     if (!b) return;
     const newFlagged = form.flagged === "Yes" ? "" : "Yes";
-    // Block polling during flag sync
     savingRef.current = true;
-    // Update form immediately
+    // Capture the current form state BEFORE any async work — this is the source of truth
+    const currentForm = { ...form, flagged: newFlagged };
+    // Update UI immediately
     setForm(f => ({...f, flagged: newFlagged}));
-    // Only patch the flagged field in surveys — preserve everything else
     setSurveys(prev => {
       const existing = prev[selected] || {};
       return {...prev, [selected]: {...existing, flagged: newFlagged}};
     });
-    // Sync only the flag to the sheet (patch, not full overwrite)
     setFlagging(true);
     try {
       const result = await updateFlagEntry(selected, newFlagged, curLocRef.current);
-      // If row doesn't exist yet (unsaved point), create it with a full save
       if (result && result.needsRow) {
-        const sv = surveysRef.current[selected];
-        const pf = b.prefill || {};
-        const current = sv || pf;
-        const minimalEntry = { ...EMPTY_FORM, ...current, flagged: newFlagged };
-        await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, minimalEntry, curLocRef.current);
+        // Row doesn't exist yet — create it using the live form data
+        const basement = currentForm.foundationType === "B" ? "Yes" : "No";
+        const entry = { ...currentForm, basement };
+        await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, entry, curLocRef.current);
+        setSurveys(prev => ({...prev, [selected]: entry}));
       }
       showToast(newFlagged === "Yes" ? "🚩 Flagged for site visit" : "Flag removed");
     } catch (err) {
-      showToast("Flag sync failed: " + err.message, "error");
-      // Revert on failure
-      const oldFlagged = newFlagged === "Yes" ? "" : "Yes";
-      setForm(f => ({...f, flagged: oldFlagged}));
-      setSurveys(prev => {
-        const existing = prev[selected] || {};
-        return {...prev, [selected]: {...existing, flagged: oldFlagged}};
-      });
+      // updateFlagEntry threw (network error, unexpected backend error, etc.)
+      // Fall back to a full save with live form data to ensure flag is persisted
+      try {
+        const basement = currentForm.foundationType === "B" ? "Yes" : "No";
+        const entry = { ...currentForm, basement };
+        await saveSurveyEntry(selected, b.type, b.nsiId, b.lng, b.lat, entry, curLocRef.current);
+        setSurveys(prev => ({...prev, [selected]: entry}));
+        showToast(newFlagged === "Yes" ? "🚩 Flagged for site visit" : "Flag removed");
+      } catch (err2) {
+        showToast("Flag sync failed: " + err2.message, "error");
+        // Revert UI on total failure
+        const oldFlagged = newFlagged === "Yes" ? "" : "Yes";
+        setForm(f => ({...f, flagged: oldFlagged}));
+        setSurveys(prev => {
+          const existing = prev[selected] || {};
+          return {...prev, [selected]: {...existing, flagged: oldFlagged}};
+        });
+      }
     } finally {
       setFlagging(false);
       savingRef.current = false;
@@ -1559,25 +1586,25 @@ function App() {
                 <FLD label="Address">
                   <input value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))} placeholder="Street address" style={inp}/>
                 </FLD>
+                <FLD label="Stories *">
+                  <input type="number" min="1" max="99" value={form.numStories} onChange={e=>setForm(f=>({...f,numStories:e.target.value}))} style={inp}/>
+                </FLD>
                 <div style={{display:"flex",gap:6}}>
-                  <FLD label="Stories *" s={{flex:1}}>
-                    <input type="number" min="1" max="99" value={form.numStories} onChange={e=>setForm(f=>({...f,numStories:e.target.value}))} style={inp}/>
+                  <FLD label="Foundation Type *" s={{flex:1}}>
+                    <select value={form.foundationType} onChange={e=>setForm(f=>({...f,foundationType:e.target.value}))} style={{...inp,appearance:"auto"}}>
+                      <option value="">— Select —</option>
+                      <option value="S">S — Slab on Grade</option>
+                      <option value="C">C — Crawlspace</option>
+                      <option value="B">B — Basement</option>
+                      <option value="P">P — Pier/Pile</option>
+                      <option value="W">W — Solid Wall</option>
+                      <option value="U">U — Unknown</option>
+                    </select>
                   </FLD>
                   <FLD label="1st Floor Ht (ft)" s={{flex:1}}>
                     <input type="number" min="0" max="30" step="0.5" value={form.firstFloorHeight} onChange={e=>setForm(f=>({...f,firstFloorHeight:e.target.value}))} style={inp}/>
                   </FLD>
                 </div>
-                <FLD label="Foundation Type *">
-                  <select value={form.foundationType} onChange={e=>setForm(f=>({...f,foundationType:e.target.value}))} style={{...inp,appearance:"auto"}}>
-                    <option value="">— Select —</option>
-                    <option value="S">S — Slab on Grade</option>
-                    <option value="C">C — Crawlspace</option>
-                    <option value="B">B — Basement</option>
-                    <option value="P">P — Pier/Pile</option>
-                    <option value="W">W — Solid Wall</option>
-                    <option value="U">U — Unknown</option>
-                  </select>
-                </FLD>
                 <div style={{display:"flex",gap:6}}>
                   <FLD label="Occupancy Type *" s={{flex:2}}>
                     <select value={form.occType} onChange={e=>setForm(f=>({...f,occType:e.target.value}))} style={{...inp,appearance:"auto"}}>
