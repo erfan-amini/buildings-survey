@@ -1208,14 +1208,15 @@ function App() {
   };
 
   const exportXLSX = () => {
-    // Export saved buildings, flagged buildings, and demolished buildings
+    // Export all buildings EXCEPT: flagged "Yes", flagged "Demolished",
+    // or unsaved new (red) points (survey_type === "survey" with no savedAt).
     const exportBuildings = buildings.filter(b => {
       const sv = surveys[b.uid];
       const pf = b.prefill || {};
       const d = sv || pf;
-      if (sv && sv.savedAt) return true;
-      if (d.flagged === "Yes" || d.flagged === "Demolished") return true;
-      return false;
+      if (d.flagged === "Yes" || d.flagged === "Demolished") return false;
+      if (b.type === "survey" && !(sv && sv.savedAt)) return false;
+      return true;
     });
     if (exportBuildings.length === 0) { showToast("No buildings to export", "error"); return; }
     const headers = ["ID","occupancy_type","building_type","number_of_stories","area","foundation_type","foundation_height","year_built","ground_elevation","address","longitude","latitude","structure_value","content_value","flagged"];
