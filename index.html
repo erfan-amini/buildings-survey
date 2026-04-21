@@ -1219,7 +1219,7 @@ function App() {
       return true;
     });
     if (exportBuildings.length === 0) { showToast("No buildings to export", "error"); return; }
-    const headers = ["ID","occupancy_type","building_type","number_of_stories","area","foundation_type","foundation_height","year_built","ground_elevation","address","longitude","latitude","structure_value","content_value","flagged"];
+    const headers = ["ID","occupancy_type","building_type","number_of_stories","area","foundation_type","foundation_height","year_built","ground_elevation","address","longitude","latitude","structure_value","content_value"];
     const num = v => { const n = parseFloat(v); return isFinite(n) ? n : ""; };
     const rows = exportBuildings.map(b => {
       const saved = surveys[b.uid];
@@ -1231,14 +1231,13 @@ function App() {
         num(s.numStories || ""), num(s.area || ""),
         s.foundationType || "", num(s.firstFloorHeight || ""), num(s.yearBuilt || ""), num(s.groundElev || ""),
         s.address || "", num(b.lng), num(b.lat),
-        num(s.structureValue || ""), num(s.contentValue || ""),
-        s.flagged || ""
+        num(s.structureValue || ""), num(s.contentValue || "")
       ];
     });
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-    const locName = LOCATIONS[curLocRef.current].name.replace(/\s+/g, "_");
+    const locName = LOCATIONS[curLocRef.current].name.replace(/\s+/g, "");
     XLSX.writeFile(wb, "DDD___" + locName + "___NSI.xlsx");
     showToast("Exported " + exportBuildings.length + " buildings");
   };
