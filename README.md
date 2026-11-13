@@ -8,7 +8,11 @@ A browser-based geospatial survey application for collecting and managing buildi
 
 The NSI Field Survey Tool supports hazard vulnerability assessments by enabling field teams to verify, correct, and supplement building-level data from the National Structure Inventory (NSI). It provides a map interface for navigating to structures, recording survey observations, and synchronizing results to a shared backend in real time.
 
-The tool currently supports four study areas: **Shinnecock**, **Mastic Beach**, **Pamunkey**, and **West Point**.
+The tool currently supports five study areas: **Shinnecock**, **Mastic Beach**, **Pamunkey**, **West Point**, and **Hamilton and Howard Beach** (Queens, New York).
+
+Open it at https://erfan-amini.github.io/buildings-survey/. Add `?location=<slug>` to open a study area directly, for example https://erfan-amini.github.io/buildings-survey/?location=hamiltonhowardbeach. The slugs are `shinnecock`, `masticbeach`, `pamunkey`, `westpoint` and `hamiltonhowardbeach`. The address bar keeps the slug of the study area you pick, so you can copy the link and share it.
+
+The same page is embedded in the ADAPT app (Developer > NSI survey tool, file `assets/nsi_tool.html` in [erfan-amini/adapt](https://github.com/erfan-amini/adapt)). Keep the two files identical. In ADAPT the study area follows the app's location selector and the app's password applies; on GitHub Pages the page has its own password.
 
 ---
 
@@ -39,6 +43,28 @@ Buildings whose data has uncertainty or needs in-person confirmation can be flag
 Flagging is fully independent of the Save workflow. A building can be flagged without any data entered, with partial data, or with a complete saved survey. When a point that has no sheet row yet (e.g., a newly added red point) is flagged, the tool automatically creates a minimal row in the Google Sheet to persist the flag. The flag and Save buttons are mutually exclusive — one is disabled while the other is in flight — preventing write races. Clearing a survey (Undo Save) preserves the flag; it must be toggled off separately.
 
 When new points are added via Point Management, a placeholder row is immediately created in the Google Sheet with just the coordinates and ID, ensuring that flags and other metadata can be persisted before the surveyor fills in the full form.
+
+### Ground Elevation Flags
+
+Where a study area has a file `ground_3dep/<slug>.json` and `ground3dep: true` in `LOCATIONS` (now Hamilton and Howard Beach), the tool checks each building's ground elevation against USGS 3DEP 1 m bare-earth lidar and marks problems with small flags. These flags point left, so they never hide the orange site-visit flag.
+
+| Flag | Meaning |
+|:---:|---|
+| Red | The value is a placeholder from the CIRF inventory: 0, 0.33 or 3.82 ft |
+| Purple | The value is more than 4 ft below 3DEP |
+| Yellow | The value is 2 to 4 ft below 3DEP |
+
+Blank values, values within 2 ft of 3DEP and values above it get no flag. The flags are computed in the browser from the saved value, so a flag disappears as soon as a corrected value is saved.
+
+- The counts sit in the toolbar next to the status counts. Click one to show only that color; click it again to show all.
+- **🔎 Filters → Ground elevation vs USGS 3DEP** filters by flag, or hides the flags.
+- The building panel shows the 3DEP value under the Ground Elevation field and how far the entered value is from it. **📐** fills in the live 3DEP value; Save to keep it.
+
+`ground_3dep/<slug>.json` holds `{"loc": "<slug>", "ft": {"<uid>": <3DEP ground, ft NAVD88>}}`. It is made with [`tools/make_ground_3dep.py`](https://github.com/erfan-amini/adapt/blob/main/tools/make_ground_3dep.py) in the ADAPT repo. Points added after the file was made have no cached value; 📐 still looks them up.
+
+### Full Screen
+
+**Full screen** at the right end of the toolbar makes the tool fill the screen; **Exit full screen** or Esc leaves it. If the browser does not allow full screen inside the ADAPT app, the button opens this page in a new tab instead, on the same study area.
 
 ---
 
@@ -132,7 +158,7 @@ This approach ensures that cost estimates reflect **local construction costs and
 
 ### Frontend
 
-The application is a single-page web app built with React, Leaflet (mapping), and Babel (in-browser JSX transpilation). It runs entirely in the browser with no build step. All building data is pulled from the Google Sheets backend on load — no building records are embedded in the frontend code.
+The application is a single-page web app built with React, Leaflet (mapping), and Babel (in-browser JSX transpilation). It runs entirely in the browser with no build step. All building data is pulled from the Google Sheets backend on load — no building records are embedded in the frontend code. The only static data are the optional `ground_3dep/<slug>.json` files used for the ground elevation flags.
 
 ### Backend
 

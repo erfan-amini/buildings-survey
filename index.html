@@ -7,18 +7,21 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏗</text></svg>">
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #root { height: 100%; overflow: hidden; }
+    /* Embedded in Streamlit via components.html: the iframe sets a fixed
+       pixel height, and #root fills it. The app's own flex column then
+       splits that height into the top control bar + the map/right-panel row. */
   </style>
 </head>
 <body>
   <div id="root"></div>
-  <script type="text/babel">
+  <script type="text/babel" data-presets="react">
 
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 
 
@@ -30,6 +33,7 @@ const LOCATIONS = {
   masticbeach: { name: "Mastic Beach", center: [40.761, -72.848], zoom: 13 },
   pamunkey: { name: "Pamunkey", center: [37.576, -77.004], zoom: 14 },
   westpoint: { name: "West Point", center: [37.552, -76.801], zoom: 14 },
+  hamiltonhowardbeach: { name: "Hamilton and Howard Beach", center: [40.657, -73.840], zoom: 15, ground3dep: true },
 };
 
 const OCC_TYPES = [
@@ -84,6 +88,18 @@ const SHEET_URL = "https://docs.google.com/spreadsheets/d/13FjIR3W-2ENqPdkIVVJjk
 
 // ⚠️ PASTE YOUR GITHUB REPO URL BELOW (e.g., "https://github.com/username/buildings-survey"):
 const README_URL = "https://github.com/erfan-amini/buildings-survey#readme";
+
+// One file serves two places: the ADAPT app embeds it (Developer > NSI survey
+// tool) and injects window.__ADAPT_LOCATION; GitHub Pages serves it on its own:
+//   https://erfan-amini.github.io/buildings-survey/?location=<slug>
+const IS_EMBEDDED = typeof window !== "undefined" && !!window.__ADAPT_LOCATION;
+const STANDALONE_URL = "https://erfan-amini.github.io/buildings-survey/";
+function urlLocation() {
+  try {
+    const v = new URLSearchParams(window.location.search).get("location");
+    return v ? v.toLowerCase().replace(/[^a-z]/g, "") : null;
+  } catch (e) { return null; }
+}
 
 // ─── Robust fetch helper: throws on non-OK responses ───
 async function postJson(payload) {
@@ -288,6 +304,56 @@ async function fetchUSGSElevation(lng, lat) {
   return Math.round(elev * 100) / 100; // 2 decimal places, in feet NAVD88
 }
 
+// ─── Ground elevation check against USGS 3DEP ───
+// The ADAPT app injects window.__ADAPT_GROUND_3DEP = {loc, ft: {uid: ft NAVD88}}
+// for locations that have data/_survey/<slug>_ground_3dep.csv. Each building's
+// ground elevation (saved value, or the inventory value before a survey) is
+// checked against it:
+//   red    = a placeholder value from the CIRF inventory (0, 0.33 or 3.82 ft)
+//   purple = more than 4 ft below 3DEP
+//   yellow = 2 to 4 ft below 3DEP
+// Blank values, values within 2 ft of 3DEP and values above it get no flag.
+const GELEV_PLACEHOLDERS = [0, 0.328084, 3.8221784];
+const GELEV_LEVELS = ["red", "purple", "yellow"];
+const GELEV_STYLE = {
+  red:    { fill: "#dc2626", edge: "#7f1d1d", text: "#f87171", label: "Placeholder value (0, 0.33 or 3.82 ft)" },
+  purple: { fill: "#9333ea", edge: "#4c1d95", text: "#c084fc", label: "More than 4 ft below USGS 3DEP" },
+  yellow: { fill: "#facc15", edge: "#854d0e", text: "#fde047", label: "2 to 4 ft below USGS 3DEP" },
+};
+function gelevData(loc) {
+  const g = (typeof window !== "undefined") ? window.__ADAPT_GROUND_3DEP : null;
+  return (g && g.loc === loc && g.ft) ? g.ft : null;
+}
+function gelevCheck(dem, groundElev) {
+  const s = String(groundElev == null ? "" : groundElev).replace(/,/g, "").trim();
+  const g = s === "" ? NaN : Number(s);
+  const hasDem = typeof dem === "number" && isFinite(dem);
+  const res = { dem: hasDem ? dem : null, g: isFinite(g) ? g : null, gap: null, level: null, placeholder: false };
+  if (res.g === null) return res;
+  if (hasDem) res.gap = dem - g;                       // > 0: entered value is below 3DEP
+  if (GELEV_PLACEHOLDERS.some(p => Math.abs(g - p) < 0.0005)) { res.placeholder = true; res.level = "red"; return res; }
+  if (res.gap !== null && res.gap > 4) res.level = "purple";
+  else if (res.gap !== null && res.gap > 2) res.level = "yellow";
+  return res;
+}
+const _gelevUrls = {};
+function gelevIconUrl(level) {
+  if (!_gelevUrls[level]) {
+    const c = GELEV_STYLE[level];
+    // Pennant points left (the site-visit flag points right), pole foot on the point.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 16 20">`
+      + `<line x1="13" y1="1.5" x2="13" y2="19" stroke="${c.edge}" stroke-width="2" stroke-linecap="round"/>`
+      + `<path d="M12 2 L1.5 2 L4.5 5.5 L1.5 9 L12 9 Z" fill="${c.fill}" stroke="${c.edge}" stroke-width="1"/></svg>`;
+    _gelevUrls[level] = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+  }
+  return _gelevUrls[level];
+}
+const _gelevIcons = {};
+function gelevIcon(L, level) {
+  if (!_gelevIcons[level]) _gelevIcons[level] = L.icon({ iconUrl: gelevIconUrl(level), iconSize: [16, 20], iconAnchor: [13, 19] });
+  return _gelevIcons[level];
+}
+
 // ─── Cost Estimator (OLS regression on local building stock) ───
 // Uses all buildings in the current location with known gross area and
 // structure value to fit: structureValue = slope × grossArea + intercept
@@ -439,14 +505,41 @@ function App() {
   const mapInst = useRef(null);
   const markersRef = useRef({});
   const flagMarkersRef = useRef({});
+  const gelevMarkersRef = useRef({});   // ground-elevation flags, keyed by uid
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   const mrkR = isMobile ? 10 : 7;
   const mrkRv = isMobile ? 9 : 6;
   const mrkRsel = isMobile ? 14 : 10;
 
-  const [curLoc, setCurLoc] = useState("masticbeach");
+  // Initial location comes from the embedding app (ADAPT global rail). It is
+  // injected as window.__ADAPT_LOCATION (an app2 slug) before this script
+  // runs. Fall back to 'masticbeach' if absent or unknown.
+  // On its own (GitHub Pages) the page reads ?location=<slug> instead.
+  const _urlLoc = urlLocation();
+  const _injLoc = (IS_EMBEDDED && LOCATIONS[window.__ADAPT_LOCATION]) ? window.__ADAPT_LOCATION
+                : (!IS_EMBEDDED && _urlLoc && LOCATIONS[_urlLoc]) ? _urlLoc : "masticbeach";
+  const [curLoc, setCurLoc] = useState(_injLoc);
   const curLocRef = useRef(curLoc);
+  // {uid: USGS 3DEP ground, ft} for the ground-elevation flags, else null. The
+  // ADAPT app injects it; on GitHub Pages it is ground_3dep/<slug>.json.
+  const [demFt, setDemFt] = useState(() => gelevData(curLoc));
+  useEffect(() => {
+    let off = false;
+    const inj = gelevData(curLoc);
+    setDemFt(inj);
+    if (inj || IS_EMBEDDED || !(LOCATIONS[curLoc] || {}).ground3dep || !/^https?:$/.test(window.location.protocol)) return;
+    fetch("ground_3dep/" + curLoc + ".json")
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (!off && j && j.ft) setDemFt(j.ft); })
+      .catch(() => {});
+    return () => { off = true; };
+  }, [curLoc]);
+  // On GitHub Pages keep ?location= in the address bar, so the link can be shared.
+  useEffect(() => {
+    if (IS_EMBEDDED) return;
+    try { window.history.replaceState(null, "", "?location=" + curLoc); } catch (e) {}
+  }, [curLoc]);
 
   const switchLocation = useCallback(async (newLoc) => {
     if (newLoc === curLocRef.current) return;
@@ -497,7 +590,7 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [filter, setFilter] = useState("all");
-  const [advFilters, setAdvFilters] = useState({ flagged: "all", occClass: "all", foundation: "all", bldgType: "all" });
+  const [advFilters, setAdvFilters] = useState({ flagged: "all", occClass: "all", foundation: "all", bldgType: "all", gelev: "all" });
   const [devAction, setDevAction] = useState(null); // "move" | "add" | null
   const [devEdits, setDevEdits] = useState({ removed: [], moved: {}, added: [] });
   const [devDirty, setDevDirty] = useState(false);
@@ -672,7 +765,8 @@ function App() {
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
     script.onload = () => {
       const L = window.L;
-      const map = L.map(mapRef.current, { zoomControl: false }).setView([40.761, -72.848], 13);
+      const _loc0 = LOCATIONS[curLocRef.current] || LOCATIONS.masticbeach;
+      const map = L.map(mapRef.current, { zoomControl: false }).setView(_loc0.center, _loc0.zoom);
       L.control.zoom({ position: "topright" }).addTo(map);
       const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OSM", maxZoom: 19,
@@ -747,8 +841,14 @@ function App() {
     }
     if (advFilters.foundation !== "all" && (d.foundationType || "").toUpperCase() !== advFilters.foundation) return false;
     if (advFilters.bldgType !== "all" && (d.buildingType || "").toUpperCase() !== advFilters.bldgType) return false;
+    if (demFt && advFilters.gelev !== "all" && advFilters.gelev !== "hide") {
+      const lv = isDemolished ? null : gelevCheck(demFt[b.uid], d.groundElev).level;
+      if (advFilters.gelev === "any" && !lv) return false;
+      if (advFilters.gelev === "none" && lv) return false;
+      if (GELEV_LEVELS.includes(advFilters.gelev) && lv !== advFilters.gelev) return false;
+    }
     return true;
-  }, [surveys, filter, advFilters]);
+  }, [surveys, filter, advFilters, demFt]);
 
   // Update markers style
   useEffect(() => {
@@ -826,6 +926,38 @@ function App() {
       }
     }
   }, [surveys, filter, advFilters, passesFilters, buildings, selected]);
+
+  // Ground-elevation flags (only where the app sent USGS 3DEP values). Kept in
+  // their own layer and updated in place, not rebuilt on every selection, since
+  // a location can have thousands of them.
+  useEffect(() => {
+    const L = window.L;
+    if (!L || !mapInst.current) return;
+    const cur = gelevMarkersRef.current;
+    const want = {};
+    if (demFt && advFilters.gelev !== "hide") {
+      buildings.forEach(b => {
+        const d = surveys[b.uid] || b.prefill || {};
+        if (d.flagged === "Demolished") return;
+        const lv = gelevCheck(demFt[b.uid], d.groundElev).level;
+        if (lv) want[b.uid] = { lv, lat: b.lat, lng: b.lng, show: passesFilters(b) };
+      });
+    }
+    Object.keys(cur).forEach(uid => {
+      const w = want[uid], e = cur[uid];
+      if (!w || e.lv !== w.lv || e.lat !== w.lat || e.lng !== w.lng) { e.m.remove(); delete cur[uid]; }
+    });
+    Object.entries(want).forEach(([uid, w]) => {
+      let e = cur[uid];
+      if (!e) {
+        const m = L.marker([w.lat, w.lng], { icon: gelevIcon(L, w.lv), interactive: true, keyboard: false, zIndexOffset: 200,
+                                              title: GELEV_STYLE[w.lv].label }).addTo(mapInst.current);
+        m.on("click", () => window.__sel && window.__sel(uid));
+        e = cur[uid] = { m, lv: w.lv, lat: w.lat, lng: w.lng, show: null };
+      }
+      if (e.show !== w.show) { e.m.setOpacity(w.show ? 1 : 0.08); e.show = w.show; }
+    });
+  }, [buildings, surveys, advFilters, passesFilters, demFt]);
 
   useEffect(() => {
     window.__sel = (uid) => {
@@ -1434,6 +1566,39 @@ function App() {
     }
   };
 
+  // ─── Full screen ───
+  // The whole tool fills the screen. Inside ADAPT this needs the iframe to allow
+  // full screen; where the browser refuses, the GitHub Pages copy opens in a new tab.
+  const [isFull, setIsFull] = useState(false);
+  useEffect(() => {
+    const onFs = () => {
+      setIsFull(!!(document.fullscreenElement || document.webkitFullscreenElement));
+      setTimeout(() => { if (mapInst.current) mapInst.current.invalidateSize(); }, 250);
+    };
+    document.addEventListener("fullscreenchange", onFs);
+    document.addEventListener("webkitfullscreenchange", onFs);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFs);
+      document.removeEventListener("webkitfullscreenchange", onFs);
+    };
+  }, []);
+  const openStandalone = () => {
+    if (IS_EMBEDDED) window.open(STANDALONE_URL + "?location=" + encodeURIComponent(curLocRef.current), "_blank");
+    else showToast("This browser does not allow full screen here", "error");
+  };
+  const toggleFullscreen = () => {
+    const d = document, el = d.documentElement;
+    if (d.fullscreenElement || d.webkitFullscreenElement) {
+      const exit = d.exitFullscreen || d.webkitExitFullscreen;
+      if (exit) exit.call(d);
+      return;
+    }
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    const ok = d.fullscreenEnabled || d.webkitFullscreenEnabled;
+    if (!req || !ok) { openStandalone(); return; }
+    try { Promise.resolve(req.call(el)).catch(openStandalone); } catch (e) { openStandalone(); }
+  };
+
   const [fetchingElev, setFetchingElev] = useState(false);
   const autoFetchElevation = async () => {
     if (!selected) return;
@@ -1495,13 +1660,20 @@ function App() {
   const todoCount = buildings.filter(b => !(surveys[b.uid] && surveys[b.uid].savedAt)).length;
   const flaggedCount = buildings.filter(b => { const sv = surveys[b.uid]; const pf = b.prefill || {}; return (sv || pf).flagged === "Yes"; }).length;
   const demolishedCount = buildings.filter(b => { const sv = surveys[b.uid]; const pf = b.prefill || {}; return (sv || pf).flagged === "Demolished"; }).length;
+  const gelevCounts = { red: 0, purple: 0, yellow: 0 };
+  if (demFt) buildings.forEach(b => {
+    const d = surveys[b.uid] || b.prefill || {};
+    if (d.flagged === "Demolished") return;
+    const lv = gelevCheck(demFt[b.uid], d.groundElev).level;
+    if (lv) gelevCounts[lv]++;
+  });
   const selB = selected ? buildings.find(x => x.uid === selected) : null;
   // Filter-aware UIDs for Prev/Next navigation
   const filteredUids = buildings.filter(b => passesFilters(b)).map(b => b.uid);
   const devEditCount = devEdits.removed.length + Object.keys(devEdits.moved).length + devEdits.added.length;
 
   return (
-    <div style={{display:"flex",height:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#0f172a",color:"#e2e8f0"}}>
+    <div style={{display:"flex",flexDirection:"column",height:"100%",fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#0f172a",color:"#e2e8f0"}}>
       {toast && (
         <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:10000,
           padding:"10px 24px",borderRadius:8,
@@ -1509,111 +1681,126 @@ function App() {
           color:"#fff",fontWeight:600,fontSize:14,boxShadow:"0 4px 20px rgba(0,0,0,.4)"}}>{toast.msg}</div>
       )}
 
-      {/* ═══ LEFT PANEL: Controls ═══ */}
-      <div style={{width:340,minWidth:340,display:"flex",flexDirection:"column",borderRight:"1px solid #1e293b",background:"#0f172a",overflow:"auto"}}>
-        <div style={{padding:"14px 16px",flexShrink:0}}>
-          {/* ─── Header ─── */}
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-            <div style={{width:34,height:34,borderRadius:8,background:"linear-gradient(135deg,#3b82f6,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>🏗</div>
-            <div>
-              <div style={{fontWeight:700,fontSize:15,color:"#f8fafc"}}>NSI Field Survey Tool</div>
-              <div style={{fontSize:11,color:"#64748b"}}>{LOCATIONS[curLoc].name} — {buildings.length} buildings</div>
-            </div>
+      {/* ═══ TOP BAR: compact single-row toolbar (was left panel) ═══ */}
+      <div style={{width:"100%",borderBottom:"1px solid #1e293b",background:"linear-gradient(180deg,#0f172a,#111827)",flexShrink:0,position:"relative",zIndex:2000}}>
+        <div style={{padding:"7px 12px",display:"flex",flexDirection:"row",flexWrap:"wrap",alignItems:"center",gap:"8px 9px"}}>
+
+          {/* Location: read-only in ADAPT (its location selector drives it); a selector on GitHub Pages */}
+          <div style={{display:"flex",alignItems:"center",gap:6,flex:"0 0 auto",padding:"5px 10px",borderRadius:7,background:"#1e293b",border:"1px solid #334155",whiteSpace:"nowrap"}}>
+            <span style={{fontSize:13}}>📍</span>
+            {IS_EMBEDDED
+              ? <span style={{fontSize:12,fontWeight:600,color:"#e2e8f0"}}>{LOCATIONS[curLoc].name}</span>
+              : <select value={curLoc} onChange={e => switchLocation(e.target.value)} disabled={loading}
+                  style={{fontSize:12,fontWeight:600,color:"#e2e8f0",background:"#1e293b",border:"none",outline:"none",cursor:"pointer"}}>
+                  {Object.entries(LOCATIONS).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
+                </select>}
+            <span style={{fontSize:11,color:"#64748b"}}>· {buildings.length}</span>
           </div>
 
-          <select value={curLoc} onChange={e => switchLocation(e.target.value)} style={{width:"100%",padding:"7px 10px",borderRadius:7,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:13,fontWeight:600,cursor:"pointer",appearance:"auto",marginBottom:10}}>
-            {Object.entries(LOCATIONS).map(([k,v]) => <option key={k} value={k}>{v.name}</option>)}
-          </select>
+          <div style={tbDivider}/>
 
-          {/* ─── Progress ─── */}
-          <div style={{borderTop:"1px solid #1e293b",paddingTop:8,marginBottom:10}}>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#94a3b8",marginBottom:4}}>
-              <span>{doneCount} / {buildings.length} complete</span>
-              <span style={{fontWeight:600,color:pct===100?"#22c55e":"#f59e0b"}}>{pct}%</span>
+          {/* Progress + status legend (inline) */}
+          <div style={{display:"flex",alignItems:"center",gap:9,flex:"0 0 auto",whiteSpace:"nowrap"}}>
+            <div style={{width:88,height:6,borderRadius:3,background:"#1e293b",overflow:"hidden"}}>
+              <div style={{height:6,borderRadius:3,background:pct===100?"#22c55e":"linear-gradient(90deg,#3b82f6,#8b5cf6)",width:`${pct}%`,transition:"width .4s"}}/>
             </div>
-            <div style={{height:5,borderRadius:3,background:"#1e293b"}}>
-              <div style={{height:5,borderRadius:3,background:pct===100?"#22c55e":"linear-gradient(90deg,#3b82f6,#8b5cf6)",width:`${pct}%`,transition:"width .4s"}}/>
-            </div>
-            <div style={{display:"flex",gap:10,marginTop:6,fontSize:11,color:"#94a3b8",flexWrap:"wrap"}}>
-              <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#ef4444",marginRight:4,verticalAlign:"middle"}}/>New ({surveyCount})</span>
-              <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#3b82f6",marginRight:4,verticalAlign:"middle"}}/>Verify ({verifyCount})</span>
-              <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#22c55e",marginRight:4,verticalAlign:"middle"}}/>Done ({doneCount})</span>
-              {flaggedCount > 0 && <span><svg width="10" height="12" viewBox="0 0 24 28" style={{verticalAlign:"middle",marginRight:4}}><line x1="4" y1="2" x2="4" y2="27" stroke="#b45309" strokeWidth="3"/><path d="M5 3 L21 7 L5 13 Z" fill="#f97316" stroke="#b45309" strokeWidth="1"/></svg>Flag ({flaggedCount})</span>}
-              {demolishedCount > 0 && <span><svg width="12" height="12" viewBox="0 0 18 18" style={{verticalAlign:"middle",marginRight:4}}><line x1="4" y1="4" x2="14" y2="14" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/><line x1="14" y1="4" x2="4" y2="14" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/></svg>Demolished ({demolishedCount})</span>}
-            </div>
-          </div>
-
-          {/* ─── Filters ─── */}
-          <div style={{borderTop:"1px solid #1e293b",paddingTop:8,marginBottom:10}}>
-            <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Filters</div>
-            <div style={{display:"flex",gap:4,marginBottom:6}}>
-              {[["all","All",buildings.length],["survey","New",surveyCount],["done","Done",doneCount],["pending","Todo",todoCount]].map(([k,l,n])=>(
-                <button key={k} onClick={()=>setFilter(k)} style={{
-                  flex:1,padding:"4px 0",borderRadius:5,border:"none",cursor:"pointer",fontSize:10,fontWeight:600,
-                  background:filter===k?"#3b82f6":"#1e293b",color:filter===k?"#fff":"#94a3b8",
-                }}>{l} ({n})</button>
+            <span style={{fontSize:11,color:"#cbd5e1"}}>{doneCount}/{buildings.length} <b style={{color:pct===100?"#22c55e":"#f59e0b"}}>{pct}%</b></span>
+            <span style={{display:"flex",gap:8,fontSize:11,color:"#94a3b8"}}>
+              <span title="New / unsurveyed"><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:"#ef4444",marginRight:3,verticalAlign:"middle"}}/>{surveyCount}</span>
+              <span title="Verify"><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:"#3b82f6",marginRight:3,verticalAlign:"middle"}}/>{verifyCount}</span>
+              <span title="Done"><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:"#22c55e",marginRight:3,verticalAlign:"middle"}}/>{doneCount}</span>
+              {flaggedCount > 0 && <span title="Flagged" style={{color:"#f97316"}}>🚩{flaggedCount}</span>}
+              {demolishedCount > 0 && <span title="Demolished" style={{color:"#94a3b8"}}>✕{demolishedCount}</span>}
+              {demFt && GELEV_LEVELS.map(k => (
+                <span key={k} onClick={()=>setAdvFilters(f=>({...f,gelev:f.gelev===k?"all":k}))}
+                  title={"Ground elevation: " + GELEV_STYLE[k].label + ". Click to show only these."}
+                  style={{color:GELEV_STYLE[k].text,cursor:"pointer",fontWeight:advFilters.gelev===k?800:400,
+                          textDecoration:advFilters.gelev===k?"underline":"none"}}>
+                  <img src={gelevIconUrl(k)} alt="" style={{height:12,verticalAlign:"-1px",marginRight:2}}/>{gelevCounts[k]}
+                </span>
               ))}
-            </div>
-            <div style={{padding:"8px 10px",borderRadius:7,background:"#1e293b",border:"1px solid #334155",display:"flex",flexDirection:"column",gap:6}}>
-              <div style={{display:"flex",gap:6}}>
-                <div style={{flex:1}}>
-                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Status</label>
-                  <select value={advFilters.flagged} onChange={e=>setAdvFilters(f=>({...f,flagged:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
-                    <option value="all">All</option><option value="yes">🚩 Flagged</option><option value="demolished">✕ Demolished</option><option value="no">Unflagged</option>
-                  </select>
-                </div>
-                <div style={{flex:1}}>
-                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Occupancy</label>
-                  <select value={advFilters.occClass} onChange={e=>setAdvFilters(f=>({...f,occClass:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
-                    <option value="all">All</option><option value="RES">Residential</option><option value="COM">Commercial</option><option value="IND">Industrial</option><option value="OTHER">Other</option>
-                  </select>
-                </div>
-              </div>
-              <div style={{display:"flex",gap:6}}>
-                <div style={{flex:1}}>
-                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Foundation</label>
-                  <select value={advFilters.foundation} onChange={e=>setAdvFilters(f=>({...f,foundation:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
-                    <option value="all">All</option><option value="S">Slab</option><option value="C">Crawl</option><option value="B">Basement</option><option value="P">Pier</option><option value="W">Wall</option>
-                  </select>
-                </div>
-                <div style={{flex:1}}>
-                  <label style={{fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Bldg Type</label>
-                  <select value={advFilters.bldgType} onChange={e=>setAdvFilters(f=>({...f,bldgType:e.target.value}))} style={{width:"100%",padding:"5px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:11,appearance:"auto"}}>
-                    <option value="all">All</option><option value="W">Wood</option><option value="M">Masonry</option><option value="C">Concrete</option><option value="S">Steel</option><option value="H">Manuf.</option>
-                  </select>
-                </div>
-              </div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:10,color:"#94a3b8"}}>{filteredUids.length} / {buildings.length} shown</span>
-                {Object.values(advFilters).some(v=>v!=="all") && (
-                  <button onClick={()=>setAdvFilters({flagged:"all",occClass:"all",foundation:"all",bldgType:"all"})} style={{padding:"3px 10px",borderRadius:4,border:"none",cursor:"pointer",background:"#334155",color:"#f97316",fontSize:10,fontWeight:600}}>Clear</button>
-                )}
-              </div>
-            </div>
+            </span>
           </div>
 
-          {/* ─── Actions ─── */}
-          <div style={{borderTop:"1px solid #1e293b",paddingTop:8,marginBottom:10}}>
-            <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Actions</div>
-            <div style={{display:"flex",gap:5,marginBottom:5}}>
-              <button onClick={goToNearest} style={abtn("#0f766e")}>📍 Nearest</button>
-              <button onClick={exportXLSX} style={abtn("#7c3aed")}>📥 Export</button>
+          <div style={tbDivider}/>
+
+          {/* Advanced filters popover */}
+          <Popover label="🔎 Filters" panelWidth={264} accent="#3b82f6">
+            <div style={{marginBottom:9}}>
+              <label style={tbLbl}>Survey status</label>
+              <div style={{display:"flex",gap:3}}>
+                {[["all","All",buildings.length],["survey","New",surveyCount],["done","Done",doneCount],["pending","Todo",todoCount]].map(([k,l,n])=>(
+                  <button key={k} onClick={()=>setFilter(k)} style={{
+                    flex:1,padding:"5px 4px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap",
+                    background:filter===k?"#3b82f6":"#1e293b",color:filter===k?"#fff":"#94a3b8",
+                  }}>{l} <span style={{opacity:.65}}>{n}</span></button>
+                ))}
+              </div>
             </div>
-            <div style={{display:"flex",gap:5,marginBottom:5}}>
-              <button onClick={()=>window.open(SHEET_URL,"_blank")} style={abtn("#0369a1")}>📊 Sheet</button>
-              <button onClick={()=>window.open(README_URL,"_blank")} style={abtn("#475569")}>📖 Docs</button>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <div>
+                <label style={tbLbl}>Status</label>
+                <select value={advFilters.flagged} onChange={e=>setAdvFilters(f=>({...f,flagged:e.target.value}))} style={tbSel}>
+                  <option value="all">All</option><option value="yes">🚩 Flagged</option><option value="demolished">✕ Demolished</option><option value="no">Unflagged</option>
+                </select>
+              </div>
+              <div>
+                <label style={tbLbl}>Occupancy</label>
+                <select value={advFilters.occClass} onChange={e=>setAdvFilters(f=>({...f,occClass:e.target.value}))} style={tbSel}>
+                  <option value="all">All</option><option value="RES">Residential</option><option value="COM">Commercial</option><option value="IND">Industrial</option><option value="OTHER">Other</option>
+                </select>
+              </div>
+              <div>
+                <label style={tbLbl}>Foundation</label>
+                <select value={advFilters.foundation} onChange={e=>setAdvFilters(f=>({...f,foundation:e.target.value}))} style={tbSel}>
+                  <option value="all">All</option><option value="S">Slab</option><option value="C">Crawl</option><option value="B">Basement</option><option value="P">Pier</option><option value="W">Wall</option>
+                </select>
+              </div>
+              <div>
+                <label style={tbLbl}>Bldg Type</label>
+                <select value={advFilters.bldgType} onChange={e=>setAdvFilters(f=>({...f,bldgType:e.target.value}))} style={tbSel}>
+                  <option value="all">All</option><option value="W">Wood</option><option value="M">Masonry</option><option value="C">Concrete</option><option value="S">Steel</option><option value="H">Manuf.</option>
+                </select>
+              </div>
             </div>
-            <div style={{display:"flex",gap:5}}>
-              <button onClick={pullFromSheet} disabled={pulling} style={abtn("#1d4ed8")}>{pulling ? "⏳..." : "⬇ Pull"}</button>
-              <button onClick={syncAllToSheet} disabled={sheetSyncing} style={abtn("#b45309")}>{sheetSyncing ? "⏳..." : "☁️ Sync"}</button>
+            {demFt && (
+              <div style={{marginTop:8}}>
+                <label style={tbLbl}>Ground elevation vs USGS 3DEP</label>
+                <select value={advFilters.gelev} onChange={e=>setAdvFilters(f=>({...f,gelev:e.target.value}))} style={tbSel}>
+                  <option value="all">All buildings</option>
+                  <option value="any">Any ground flag ({gelevCounts.red + gelevCounts.purple + gelevCounts.yellow})</option>
+                  <option value="red">Red: placeholder value ({gelevCounts.red})</option>
+                  <option value="purple">Purple: more than 4 ft below 3DEP ({gelevCounts.purple})</option>
+                  <option value="yellow">Yellow: 2 to 4 ft below 3DEP ({gelevCounts.yellow})</option>
+                  <option value="none">No ground flag</option>
+                  <option value="hide">Hide ground flags</option>
+                </select>
+              </div>
+            )}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:9}}>
+              <span style={{fontSize:10,color:"#94a3b8"}}>{filteredUids.length} / {buildings.length} shown</span>
+              {Object.values(advFilters).some(v=>v!=="all") && (
+                <button onClick={()=>setAdvFilters({flagged:"all",occClass:"all",foundation:"all",bldgType:"all",gelev:"all"})} style={{padding:"3px 10px",borderRadius:4,border:"none",cursor:"pointer",background:"#334155",color:"#f97316",fontSize:10,fontWeight:600}}>Clear</button>
+              )}
             </div>
+          </Popover>
+
+          <div style={tbDivider}/>
+
+          {/* Actions (icon + label) */}
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,flex:"0 0 auto"}}>
+            <button title="Go to nearest unsurveyed" onClick={goToNearest} style={tbBtnL("#0f766e")}>📍 Nearest</button>
+            <button title="Export survey data to XLSX" onClick={exportXLSX} style={tbBtnL("#7c3aed")}>📥 Export</button>
+            <button title="Open the Google Sheet" onClick={()=>window.open(SHEET_URL,"_blank")} style={tbBtnL("#0369a1")}>📊 Sheet</button>
+            <button title="Open the docs" onClick={()=>window.open(README_URL,"_blank")} style={tbBtnL("#475569")}>📖 Docs</button>
+            <button title="Pull latest from the Sheet" onClick={pullFromSheet} disabled={pulling} style={tbBtnL("#1d4ed8")}>{pulling ? "⏳ Pull" : "⬇ Pull"}</button>
+            <button title="Sync all rows to the Sheet" onClick={syncAllToSheet} disabled={sheetSyncing} style={tbBtnL("#b45309")}>{sheetSyncing ? "⏳ Sync" : "☁️ Sync"}</button>
           </div>
 
-          {/* ─── Point Management ─── */}
-          <div style={{borderTop:"1px solid #1e293b",paddingTop:8}}>
-            <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Point Management</div>
-            <div style={{padding:"10px 12px",borderRadius:8,background:"#1c1917",border:"1px solid #422006"}}>
-              <div style={{display:"flex",gap:5,marginBottom:6}}>
+          {/* Developer point-management popover */}
+          <Popover label="🛠 Dev" panelWidth={252} align="right" accent="#f59e0b">
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{display:"flex",gap:5}}>
                 <button onClick={()=>setDevAction(devAction==="add"?null:"add")} style={{
                   flex:1,padding:"6px",borderRadius:6,border:devAction==="add"?"2px solid #22c55e":"1px solid #334155",
                   cursor:"pointer",background:devAction==="add"?"#14532d":"#1e293b",
@@ -1628,7 +1815,7 @@ function App() {
                   color:devAction==="move"?"#60a5fa":"#94a3b8",fontWeight:600,fontSize:11,
                 }}>{devAction==="move"?"🔵 Click Map...":"✥ Move"}</button>
               </div>
-              <div style={{display:"flex",gap:5,marginBottom:6}}>
+              <div style={{display:"flex",gap:5}}>
                 <button onClick={()=>{
                   if (!selected) { showToast("Select a point first","error"); return; }
                   devDuplicate();
@@ -1643,7 +1830,7 @@ function App() {
                 </button>
               </div>
               <button onClick={()=>setDevAction(devAction==="demolished"?null:"demolished")} style={{
-                width:"100%",padding:"6px",borderRadius:6,marginBottom:6,
+                width:"100%",padding:"6px",borderRadius:6,
                 border:devAction==="demolished"?"2px solid #94a3b8":"1px solid #334155",
                 cursor:"pointer",background:devAction==="demolished"?"#334155":"#1e293b",
                 color:devAction==="demolished"?"#e2e8f0":"#94a3b8",fontWeight:600,fontSize:11,
@@ -1662,18 +1849,30 @@ function App() {
                 </div>
               )}
               {!devDirty && devEditCount > 0 && (
-                <div style={{marginTop:5,fontSize:10,color:"#4ade80",textAlign:"center"}}>✓ Synced</div>
+                <div style={{fontSize:10,color:"#4ade80",textAlign:"center"}}>✓ Synced</div>
               )}
               {selected && selB && (
-                <div style={{marginTop:5,fontSize:10,color:"#a8a29e",lineHeight:1.4}}>
+                <div style={{fontSize:10,color:"#a8a29e",lineHeight:1.4}}>
                   Selected: <b style={{color:"#fbbf24"}}>{selB.uid}</b> at {selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}
                 </div>
               )}
             </div>
-          </div>
+          </Popover>
+
+          {/* Full screen (Esc leaves it) */}
+          <button onClick={toggleFullscreen} title={isFull ? "Leave full screen (Esc)" : "Full screen"}
+            style={{...tbBtnL("#334155"), marginLeft:"auto"}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d={isFull ? "M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" : "M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"}/>
+            </svg>
+            {isFull ? "Exit full screen" : "Full screen"}
+          </button>
+
         </div>
       </div>
 
+      {/* ═══ BODY: Map + right detail panel ═══ */}
+      <div style={{display:"flex",flexDirection:"row",flex:1,minHeight:0}}>
       {/* ═══ CENTER: Map ═══ */}
       <div style={{flex:1,position:"relative"}}>
         <div ref={mapRef} style={{width:"100%",height:"100%"}}/>
@@ -1747,6 +1946,11 @@ function App() {
                     {surveys[selected] && surveys[selected].savedAt && <span style={{marginLeft:4,fontSize:9,padding:"2px 6px",borderRadius:4,background:"#166534",color:"#4ade80"}}>SAVED</span>}
                     {((surveys[selected] || (selB && selB.prefill) || {}).flagged === "Yes") && <span style={{marginLeft:4,fontSize:9,padding:"2px 6px",borderRadius:4,background:"#431407",color:"#fb923c"}}>🚩</span>}
                     {((surveys[selected] || (selB && selB.prefill) || {}).flagged === "Demolished") && <span style={{marginLeft:4,fontSize:9,padding:"2px 6px",borderRadius:4,background:"#334155",color:"#94a3b8"}}>✕ DEMOLISHED</span>}
+                    {demFt && (() => {
+                      const d0 = surveys[selected] || (selB && selB.prefill) || {};
+                      const lv = d0.flagged === "Demolished" ? null : gelevCheck(demFt[selected], d0.groundElev).level;
+                      return lv ? <span title={"Ground elevation: " + GELEV_STYLE[lv].label} style={{marginLeft:4,fontSize:9,padding:"2px 6px",borderRadius:4,background:"#1e293b",color:GELEV_STYLE[lv].text,border:"1px solid " + GELEV_STYLE[lv].fill}}><img src={gelevIconUrl(lv)} alt="" style={{height:10,verticalAlign:"-1px",marginRight:3}}/>GROUND</span> : null;
+                    })()}
                   </div>
                   <div style={{fontSize:10,color:"#64748b",marginTop:1}}>{selB.lat.toFixed(6)}, {selB.lng.toFixed(6)}</div>
                 </div>
@@ -1856,6 +2060,23 @@ function App() {
                     </div>
                   </FLD>
                 </div>
+                {demFt && (() => {
+                  const gc = gelevCheck(demFt[selected], form.groundElev);
+                  const box = (edge, kids) => <div style={{marginTop:-2,padding:"5px 8px",borderRadius:6,background:"#0b1220",borderLeft:"3px solid " + edge,fontSize:10,lineHeight:1.45,color:"#cbd5e1"}}>{kids}</div>;
+                  if (gc.dem === null) return box("#334155", <span>No saved 3DEP value for this point. 📐 looks it up live.</span>);
+                  const f2 = v => v.toFixed(2);
+                  const st = gc.level ? GELEV_STYLE[gc.level] : null;
+                  let msg = "No ground elevation entered.";
+                  if (gc.g !== null) {
+                    const rel = Math.abs(gc.gap) < 0.005 ? "the same as 3DEP" : gc.gap > 0 ? f2(gc.gap) + " ft below 3DEP" : f2(-gc.gap) + " ft above 3DEP";
+                    msg = "Entered " + f2(gc.g) + " ft, " + rel + ".";
+                  }
+                  const flagTxt = { red: "Red flag: placeholder value.", purple: "Purple flag: more than 4 ft below 3DEP.", yellow: "Yellow flag: 2 to 4 ft below 3DEP." };
+                  return box(st ? st.fill : "#22c55e", <span>
+                    <b style={{color:"#e2e8f0"}}>USGS 3DEP ground: {f2(gc.dem)} ft</b> (1 m lidar). {msg}
+                    {st && <span style={{display:"block",color:st.text}}><img src={gelevIconUrl(gc.level)} alt="" style={{height:10,verticalAlign:"-1px",marginRight:3}}/>{flagTxt[gc.level]} 📐 fills in the 3DEP value; Save to keep it.</span>}
+                  </span>);
+                })()}
                 <div style={{display:"flex",gap:6,alignItems:"flex-end"}}>
                   <FLD label="Structure Value ($) *" s={{flex:1}}>
                     <input type="number" value={form.structureValue} onChange={e=>setForm(f=>({...f,structureValue:e.target.value}))} style={inp}/>
@@ -1884,6 +2105,7 @@ function App() {
           )}
         </div>
       </div>
+      </div>
 
       <style>{`
         .leaflet-container { background: #0f172a !important; }
@@ -1906,6 +2128,53 @@ function FLD({label,children,s}) {
 }
 
 const inp = {width:"100%",padding:"8px 10px",borderRadius:7,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"};
+
+// ─── Compact top-bar helpers (NSI tab toolbar) ───
+// Lightweight click-outside popover so the dense controls (advanced filters,
+// developer point-management) collapse into on-demand panels, keeping the
+// toolbar to a single low row.
+function Popover({ label, panelWidth = 260, align = "left", accent = "#334155", children }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+  return (
+    <div ref={ref} style={{ position: "relative", flex: "0 0 auto" }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        padding: "6px 11px", borderRadius: 7, border: "1px solid " + (open ? accent : "#334155"),
+        background: open ? "#1e293b" : "#111827", color: "#e2e8f0",
+        fontWeight: 600, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap",
+        display: "flex", alignItems: "center", gap: 6,
+      }}>{label}<span style={{ fontSize: 8, color: "#94a3b8" }}>{open ? "▲" : "▼"}</span></button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", [align]: 0, zIndex: 3000,
+          width: panelWidth, background: "#0f172a", border: "1px solid #334155",
+          borderRadius: 10, padding: 12, boxShadow: "0 14px 38px rgba(0,0,0,.55)",
+        }}>{children}</div>
+      )}
+    </div>
+  );
+}
+
+const tbDivider = { width: 1, alignSelf: "stretch", minHeight: 22, background: "#1e293b", margin: "0 1px" };
+const tbIconBtn = (bg) => ({
+  width: 34, height: 31, borderRadius: 7, border: "none", cursor: "pointer",
+  background: bg, color: "#fff", fontSize: 14, lineHeight: 1, display: "flex",
+  alignItems: "center", justifyContent: "center", flex: "0 0 auto",
+});
+// Labeled compact button (icon + text) for the colorful action controls.
+const tbBtnL = (bg) => ({
+  height: 31, padding: "0 11px", borderRadius: 7, border: "none", cursor: "pointer",
+  background: bg, color: "#fff", fontSize: 11.5, fontWeight: 600, lineHeight: 1,
+  display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flex: "0 0 auto",
+});
+const tbLbl = { fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, display: "block", marginBottom: 3 };
+const tbSel = { width: "100%", padding: "5px 6px", borderRadius: 5, border: "1px solid #334155", background: "#0f172a", color: "#e2e8f0", fontSize: 11, appearance: "auto" };
 
 function abtn(bg) {
   return {flex:1,padding:"6px 0",borderRadius:6,border:"none",cursor:"pointer",background:bg,color:"#e2e8f0",fontWeight:600,fontSize:11,textAlign:"center"};
@@ -1955,7 +2224,9 @@ function PasswordGate({ onUnlock }) {
 }
 
 function Root() {
-  const [authed, setAuthed] = React.useState(false);
+  // Inside ADAPT the section password already applies. On its own (GitHub
+  // Pages) the tool keeps its own password gate.
+  const [authed, setAuthed] = React.useState(IS_EMBEDDED);
   if (!authed) return <PasswordGate onUnlock={() => setAuthed(true)} />;
   return <App />;
 }
