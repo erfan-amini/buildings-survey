@@ -12,7 +12,11 @@ The tool currently supports five study areas: **Shinnecock**, **Mastic Beach**, 
 
 Open it at https://erfan-amini.github.io/buildings-survey/. Add `?location=<slug>` to open a study area directly, for example https://erfan-amini.github.io/buildings-survey/?location=hamiltonhowardbeach. The slugs are `shinnecock`, `masticbeach`, `pamunkey`, `westpoint` and `hamiltonhowardbeach`. The address bar keeps the slug of the study area you pick, so you can copy the link and share it.
 
-The same page is embedded in the ADAPT app (Developer > NSI survey tool, file `assets/nsi_tool.html` in [erfan-amini/adapt](https://github.com/erfan-amini/adapt)). Keep the two files identical. In ADAPT the study area follows the app's location selector and the app's password applies; on GitHub Pages the page has its own password.
+The same page is embedded in the ADAPT app (Developer > NSI survey tool, file `assets/nsi_tool.html` in [erfan-amini/adapt](https://github.com/erfan-amini/adapt)). Keep the two files identical. In ADAPT the study area follows the app's location selector.
+
+### Password
+
+The backend (Google Apps Script) refuses every request, reads included, without the project password. The password is kept only in the Apps Script project (Project Settings → Script properties → `SURVEY_PASSWORD`), never in this code. On GitHub Pages the page asks for it and the backend checks it; the browser keeps it until the tab or window is closed. Inside ADAPT, the password the user entered to open the app is passed to the tool. To change the password, change the script property (and `[access] password` in the ADAPT app's Streamlit secrets, if that is set).
 
 ---
 
